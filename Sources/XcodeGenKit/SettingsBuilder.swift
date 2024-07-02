@@ -219,11 +219,34 @@ private enum Cached<T> {
     }
 }
 
+private final class CacheContainer {
+    let value: Cached<BuildSettings>
+
+    init(value: Cached<BuildSettings>) {
+        self.value = value
+    }
+}
+
+extension NSCache where KeyType == NSString, ObjectType == CacheContainer {
+    subscript(aKey: String) -> Cached<BuildSettings>? {
+        get {
+            object(forKey: aKey as NSString)?.value
+        }
+        set {
+            if let value = newValue {
+                setObject(CacheContainer(value: value), forKey: aKey as NSString)
+            } else {
+                removeObject(forKey: aKey as NSString)
+            }
+        }
+    }
+}
+
 // cached flattened xcconfig file settings
-private var configFileSettings: [String: Cached<BuildSettings>] = [:]
+private var configFileSettings = NSCache<NSString, CacheContainer>()
 
 // cached setting preset settings
-private var settingPresetSettings: [String: Cached<BuildSettings>] = [:]
+private var settingPresetSettings = NSCache<NSString, CacheContainer>()
 
 extension SettingsPresetFile {
 
