@@ -1,8 +1,7 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
 public struct BuildRule: Equatable {
-
     public static let scriptCompilerSpec = "com.apple.compilers.proxy.script"
     public static let filePatternFileType = "pattern.proxy"
     public static let runOncePerArchitectureDefault = true
@@ -13,15 +12,15 @@ public struct BuildRule: Equatable {
 
         public var fileType: String {
             switch self {
-            case let .type(fileType): return fileType
-            case .pattern: return BuildRule.filePatternFileType
+            case let .type(fileType): fileType
+            case .pattern: BuildRule.filePatternFileType
             }
         }
 
         public var pattern: String? {
             switch self {
-            case .type: return nil
-            case let .pattern(pattern): return pattern
+            case .type: nil
+            case let .pattern(pattern): pattern
             }
         }
     }
@@ -32,15 +31,15 @@ public struct BuildRule: Equatable {
 
         public var compilerSpec: String {
             switch self {
-            case let .compilerSpec(compilerSpec): return compilerSpec
-            case .script: return BuildRule.scriptCompilerSpec
+            case let .compilerSpec(compilerSpec): compilerSpec
+            case .script: BuildRule.scriptCompilerSpec
             }
         }
 
         public var script: String? {
             switch self {
-            case .compilerSpec: return nil
-            case let .script(script): return script
+            case .compilerSpec: nil
+            case let .script(script): script
             }
         }
     }
@@ -53,11 +52,11 @@ public struct BuildRule: Equatable {
     public var runOncePerArchitecture: Bool
 
     public init(
-        fileType: FileType, 
-        action: Action, 
-        name: String? = nil, 
-        outputFiles: [String] = [], 
-        outputFilesCompilerFlags: [String] = [], 
+        fileType: FileType,
+        action: Action,
+        name: String? = nil,
+        outputFiles: [String] = [],
+        outputFilesCompilerFlags: [String] = [],
         runOncePerArchitecture: Bool = runOncePerArchitectureDefault
     ) {
         self.fileType = fileType
@@ -70,19 +69,17 @@ public struct BuildRule: Equatable {
 }
 
 extension BuildRule: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-
         if let fileType: String = jsonDictionary.json(atKeyPath: "fileType") {
             self.fileType = .type(fileType)
         } else {
-            fileType = .pattern(try jsonDictionary.json(atKeyPath: "filePattern"))
+            fileType = .pattern(try jsonDictionary.jsonStrict(atKeyPath: "filePattern"))
         }
 
         if let compilerSpec: String = jsonDictionary.json(atKeyPath: "compilerSpec") {
             action = .compilerSpec(compilerSpec)
         } else {
-            action = .script(try jsonDictionary.json(atKeyPath: "script"))
+            action = .script(try jsonDictionary.jsonStrict(atKeyPath: "script"))
         }
 
         outputFiles = jsonDictionary.json(atKeyPath: "outputFiles") ?? []
@@ -101,16 +98,16 @@ extension BuildRule: JSONEncodable {
         ]
 
         switch fileType {
-        case .pattern(let string):
+        case let .pattern(string):
             dict["filePattern"] = string
-        case .type(let string):
+        case let .type(string):
             dict["fileType"] = string
         }
 
         switch action {
-        case .compilerSpec(let string):
+        case let .compilerSpec(string):
             dict["compilerSpec"] = string
-        case .script(let string):
+        case let .script(string):
             dict["script"] = string
         }
 

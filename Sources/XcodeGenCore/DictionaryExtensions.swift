@@ -1,5 +1,5 @@
 extension Dictionary where Key == String, Value == Any? {
-    func removingEmptyArraysDictionariesAndNils() -> [String: Any] {
+    public func removingEmptyArraysDictionariesAndNils() -> [String: Any] {
         var new: [String: Any] = [:]
         filter(outNil).forEach { pair in
             let value: Any
@@ -17,17 +17,17 @@ extension Dictionary where Key == String, Value == Any? {
             .filter(outEmptyDictionaries)
     }
 
-    func outEmptyArrays(_ pair: (key: String, value: Any)) -> Bool {
+    private func outEmptyArrays(_ pair: (key: String, value: Any)) -> Bool {
         guard let array = pair.value as? [Any] else { return true }
         return !array.isEmpty
     }
 
-    func outEmptyDictionaries(_ pair: (key: String, value: Any)) -> Bool {
+    private func outEmptyDictionaries(_ pair: (key: String, value: Any)) -> Bool {
         guard let dictionary = pair.value as? [String: Any] else { return true }
         return !dictionary.isEmpty
     }
 
-    func outNil(_ pair: (key: String, value: Any?)) -> Bool {
-        return pair.value != nil
+    private func outNil(_ pair: (key: String, value: Any?)) -> Bool {
+        pair.value != nil
     }
 }

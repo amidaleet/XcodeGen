@@ -1,7 +1,7 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
-public struct TestPlan: Hashable {
+public struct TestPlan: Hashable, Sendable {
     public var path: String
     public var defaultPlan: Bool
 
@@ -11,11 +11,9 @@ public struct TestPlan: Hashable {
     }
 }
 
-
 extension TestPlan: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        path = try jsonDictionary.json(atKeyPath: "path")
+        path = try jsonDictionary.jsonStrict(atKeyPath: "path")
         defaultPlan = jsonDictionary.json(atKeyPath: "defaultPlan") ?? false
     }
 }
@@ -25,12 +23,11 @@ extension TestPlan: JSONEncodable {
         [
             "path": path,
             "defaultPlan": defaultPlan,
-        ] as [String : Any]
+        ] as [String: Any]
     }
 }
 
 extension TestPlan: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("path"),

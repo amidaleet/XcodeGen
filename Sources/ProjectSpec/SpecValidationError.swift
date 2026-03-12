@@ -1,15 +1,14 @@
 import Foundation
 import Version
 
-public struct SpecValidationError: Error, CustomStringConvertible {
-
+public struct SpecValidationError: Error, CustomStringConvertible, Sendable {
     public var errors: [ValidationError]
 
     public init(errors: [ValidationError]) {
         self.errors = errors
     }
 
-    public enum ValidationError: Hashable, Error, CustomStringConvertible {
+    public enum ValidationError: Hashable, Error, CustomStringConvertible, @unchecked Sendable {
         case invalidXcodeGenVersion(minimumVersion: Version, version: Version)
         case invalidSDKDependency(target: String, dependency: String)
         case invalidTargetDependency(target: String, dependency: String)
@@ -47,71 +46,71 @@ public struct SpecValidationError: Error, CustomStringConvertible {
         public var description: String {
             switch self {
             case let .invalidXcodeGenVersion(minimumVersion, version):
-                return "XcodeGen version is \(version), but minimum required version specified as \(minimumVersion)"
+                "XcodeGen version is \(version), but minimum required version specified as \(minimumVersion)"
             case let .invalidSDKDependency(target, dependency):
-                return "Target \(target.quoted) has invalid sdk dependency: \(dependency.quoted). It must be a full path or have the following extensions: .framework, .dylib, .tbd"
+                "Target \(target.quoted) has invalid sdk dependency: \(dependency.quoted). It must be a full path or have the following extensions: .framework, .dylib, .tbd"
             case let .invalidTargetDependency(target, dependency):
-                return "Target \(target.quoted) has invalid dependency: \(dependency.quoted)"
+                "Target \(target.quoted) has invalid dependency: \(dependency.quoted)"
             case let .invalidTargetConfigFile(target, configFile, config):
-                return "Target \(target.quoted) has invalid config file path \(configFile.quoted) for config \(config.quoted)"
+                "Target \(target.quoted) has invalid config file path \(configFile.quoted) for config \(config.quoted)"
             case let .invalidTargetSource(target, source):
-                return "Target \(target.quoted) has a missing source directory \(source.quoted)"
+                "Target \(target.quoted) has a missing source directory \(source.quoted)"
             case let .invalidTargetSchemeConfigVariant(target, configVariant, configType):
-                return "Target \(target.quoted) has an invalid scheme config variant which requires a config that has a \(configType.rawValue.quoted) type and contains the name \(configVariant.quoted)"
+                "Target \(target.quoted) has an invalid scheme config variant which requires a config that has a \(configType.rawValue.quoted) type and contains the name \(configVariant.quoted)"
             case let .invalidTargetSchemeTest(target, test):
-                return "Target \(target.quoted) scheme has invalid test \(test.quoted)"
+                "Target \(target.quoted) scheme has invalid test \(test.quoted)"
             case let .invalidTargetPlatformForSupportedDestinations(target):
-                return "Target \(target.quoted) has supported destinations that require a target platform iOS or auto"
+                "Target \(target.quoted) has supported destinations that require a target platform iOS or auto"
             case let .unexpectedTargetPlatformForSupportedDestinations(target, platform):
-                return "Target \(target.quoted) has platform \(platform.rawValue.quoted) that does not expect supported destinations"
+                "Target \(target.quoted) has platform \(platform.rawValue.quoted) that does not expect supported destinations"
             case let .multipleMacPlatformsInSupportedDestinations(target):
-                return "Target \(target.quoted) has multiple definitions of mac platforms in supported destinations"
+                "Target \(target.quoted) has multiple definitions of mac platforms in supported destinations"
             case let .missingTargetPlatformInSupportedDestinations(target, platform):
-                return "Target \(target.quoted) has platform \(platform.rawValue.quoted) that is missing in supported destinations"
+                "Target \(target.quoted) has platform \(platform.rawValue.quoted) that is missing in supported destinations"
             case let .containsWatchOSDestinationForMultiplatformApp(target):
-                return "Multiplatform app \(target.quoted) cannot contain watchOS in \"supportedDestinations\". Create a separate target using \"platform\" for watchOS apps"
+                "Multiplatform app \(target.quoted) cannot contain watchOS in \"supportedDestinations\". Create a separate target using \"platform\" for watchOS apps"
             case let .invalidConfigFile(configFile, config):
-                return "Invalid config file \(configFile.quoted) for config \(config.quoted)"
+                "Invalid config file \(configFile.quoted) for config \(config.quoted)"
             case let .invalidSchemeTarget(scheme, target, action):
-                return "Scheme \(scheme.quoted) has invalid \(action) target \(target.quoted)"
+                "Scheme \(scheme.quoted) has invalid \(action) target \(target.quoted)"
             case let .invalidSchemeConfig(scheme, config):
-                return "Scheme \(scheme.quoted) has invalid build configuration \(config.quoted)"
+                "Scheme \(scheme.quoted) has invalid build configuration \(config.quoted)"
             case let .invalidBuildSettingConfig(config):
-                return "Build setting has invalid build configuration \(config.quoted)"
+                "Build setting has invalid build configuration \(config.quoted)"
             case let .invalidSettingsGroup(group):
-                return "Invalid settings group \(group.quoted)"
+                "Invalid settings group \(group.quoted)"
             case let .invalidBuildScriptPath(target, name, path):
-                return "Target \(target.quoted) has a script \(name != nil ? "\(name!.quoted) which has a " : "")path that doesn't exist \(path.quoted)"
+                "Target \(target.quoted) has a script \(name != nil ? "\(name!.quoted) which has a " : "")path that doesn't exist \(path.quoted)"
             case let .invalidFileGroup(group):
-                return "Invalid file group \(group.quoted)"
+                "Invalid file group \(group.quoted)"
             case let .invalidConfigFileConfig(config):
-                return "Config file has invalid config \(config.quoted)"
+                "Config file has invalid config \(config.quoted)"
             case let .invalidSwiftPackage(name, target):
-                return "Target \(target.quoted) has an invalid package dependency \(name.quoted)"
+                "Target \(target.quoted) has an invalid package dependency \(name.quoted)"
             case let .invalidLocalPackage(path):
-                return "Invalid local package \(path.quoted)"
+                "Invalid local package \(path.quoted)"
             case let .invalidPackageDependencyReference(name):
-                return "Package reference \(name) must be specified as package dependency, not target"
+                "Package reference \(name) must be specified as package dependency, not target"
             case let .missingConfigForTargetScheme(target, configType):
-                return "Target \(target.quoted) is missing a config of type \(configType.rawValue) to generate its scheme"
+                "Target \(target.quoted) is missing a config of type \(configType.rawValue) to generate its scheme"
             case let .missingDefaultConfig(name):
-                return "Default configuration \(name) doesn't exist"
+                "Default configuration \(name) doesn't exist"
             case .invalidPerConfigSettings:
-                return "Settings that are for a specific config must go in \"configs\". \"base\" can be used for common settings"
+                "Settings that are for a specific config must go in \"configs\". \"base\" can be used for common settings"
             case let .invalidProjectReference(scheme, project):
-                return "Scheme \(scheme.quoted) has invalid project reference \(project.quoted)"
+                "Scheme \(scheme.quoted) has invalid project reference \(project.quoted)"
             case let .invalidProjectReferencePath(reference):
-                return "Project reference \(reference.name) has a project file path that doesn't exist \"\(reference.path)\""
+                "Project reference \(reference.name) has a project file path that doesn't exist \"\(reference.path)\""
             case let .invalidTestPlan(testPlan):
-                return "Test plan path \"\(testPlan.path)\" doesn't exist"
+                "Test plan path \"\(testPlan.path)\" doesn't exist"
             case .multipleDefaultTestPlans:
-                return "Your test plans contain more than one default test plan"
+                "Your test plans contain more than one default test plan"
             case let .duplicateDependencies(target, dependencyReference):
-                 return "Target \(target.quoted) has the dependency \(dependencyReference.quoted) multiple times"
+                "Target \(target.quoted) has the dependency \(dependencyReference.quoted) multiple times"
             case let .invalidPluginPackageReference(plugin, package):
-                return "Plugin \(plugin) has invalid package reference \(package)"
+                "Plugin \(plugin) has invalid package reference \(package)"
             case let .emptySourcePath(target):
-                return "Target \(target.quoted) has an empty source path entry"
+                "Target \(target.quoted) has an empty source path entry"
             }
         }
     }
@@ -123,6 +122,6 @@ public struct SpecValidationError: Error, CustomStringConvertible {
         } else {
             title = "\(errors.count) Spec validations errors:\n\t- "
         }
-        return "\(title)" + errors.map { $0.description }.joined(separator: "\n\t- ")
+        return "\(title)" + errors.map(\.description).joined(separator: "\n\t- ")
     }
 }

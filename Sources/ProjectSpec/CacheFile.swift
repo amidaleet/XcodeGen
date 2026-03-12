@@ -1,15 +1,20 @@
 import Foundation
-import XcodeGenCore
 import Version
+import XcodeGenCore
 
-public class CacheFile {
-
+/// Семантически `HashFile` (название оставили от первоисточника пакета)
+///
+/// Используется для проверки наличия diff,
+/// между ранее созданным .xcproject и свежей моделью (из project.yml и файловой системы)
+public struct CacheFile: Equatable {
     public let string: String
 
-    init?(version: Version, projectDictionary: [String: Any], project: Project) throws {
+    /// Raw format constructor, no validation, no format
+    public init(string: String) {
+        self.string = string
+    }
 
-        guard #available(OSX 10.13, *) else { return nil }
-
+    public init(version: Version, projectDictionary: [String: Any], project: Project) throws {
         let files = Set(project.allTrackedFiles)
             .map { ((try? $0.relativePath(from: project.basePath)) ?? $0).string }
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
@@ -29,5 +34,13 @@ public class CacheFile {
         \(files)"
 
         """
+    }
+}
+
+// MARK: - Helpers
+
+extension String {
+    public func toCacheFile() -> CacheFile {
+        CacheFile(string: self)
     }
 }

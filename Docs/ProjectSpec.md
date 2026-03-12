@@ -1,4 +1,4 @@
-# Project Spec
+# Project Spec (project.yml)
 
 The project spec can be written in either YAML or JSON. All the examples below use YAML.
 
@@ -9,51 +9,51 @@ Some of the YAML examples below don't show all the required properties. For exam
 
 You can also use environment variables in your configuration file, by using `${SOME_VARIABLE}` in a string.
 
-- [Project](#project)
-  - [Include](#include)
-  - [Options](#options)
-  - [GroupOrdering](#groupordering)
-  - [FileType](#filetype)
-  - [Breakpoints](#breakpoints)
-    - [Breakpoint Action](#breakpoint-action)
-  - [Configs](#configs)
-  - [Setting Groups](#setting-groups)
-- [Settings](#settings)
-- [Target](#target)
-  - [Product Type](#product-type)
-  - [Platform](#platform)
-  - [Supported Destinations](#supported-destinations)
-  - [Sources](#sources)
-    - [Target Source](#target-source)
-  - [Dependency](#dependency)
-  - [Config Files](#config-files)
-  - [Plist](#plist)
-  - [Build Tool Plug-ins](#build-tool-plug-ins)
-  - [Build Script](#build-script)
-  - [Build Rule](#build-rule)
-  - [Target Scheme](#target-scheme)
-  - [Legacy Target](#legacy-target)
-- [Aggregate Target](#aggregate-target)
-- [Target Template](#target-template)
-- [Scheme](#scheme)
-  - [Build](#build)
-  - [Common Build Action options](#common-build-action-options)
-  - [Execution Action](#execution-action)
-  - [Run Action](#run-action)
-  - [Test Action](#test-action)
-    - [Test Target](#test-target)
-    - [Other Parameters](#other-parameters)
-    - [Testable Target Reference](#testable-target-reference)
-  - [Archive Action](#archive-action)
-  - [Simulate Location](#simulate-location)
-  - [Scheme Management](#scheme-management)
-  - [Environment Variable](#environment-variable)
-  - [Test Plan](#test-plan)
-- [Scheme Template](#scheme-template)
-- [Swift Package](#swift-package)
-  - [Remote Package](#remote-package)
-  - [Local Package](#local-package)
-- [Project Reference](#project-reference)
+- [Project Spec (project.yml)](#project-spec-projectyml)
+  - [Project](#project)
+    - [Include](#include)
+    - [Options](#options)
+    - [GroupOrdering](#groupordering)
+    - [FileType](#filetype)
+    - [Breakpoints](#breakpoints)
+      - [Breakpoint Action](#breakpoint-action)
+    - [Configs](#configs)
+    - [Setting Groups](#setting-groups)
+  - [Settings](#settings)
+  - [Target](#target)
+    - [Product Type](#product-type)
+    - [Platform](#platform)
+    - [Supported Destinations](#supported-destinations)
+    - [Sources](#sources)
+      - [Target Source](#target-source)
+    - [Dependency](#dependency)
+    - [Config Files](#config-files)
+    - [Plist](#plist)
+    - [Build Tool Plug-ins](#build-tool-plug-ins)
+    - [Build Script](#build-script)
+    - [Build Rule](#build-rule)
+    - [Target Scheme](#target-scheme)
+  - [Aggregate Target](#aggregate-target)
+  - [Target Template](#target-template)
+  - [Scheme](#scheme)
+    - [Build](#build)
+    - [Common Build Action options](#common-build-action-options)
+    - [Execution Action](#execution-action)
+    - [Run Action](#run-action)
+    - [Test Action](#test-action)
+      - [Test Target](#test-target)
+      - [Other Parameters](#other-parameters)
+      - [Testable Target Reference](#testable-target-reference)
+    - [Archive Action](#archive-action)
+    - [Simulate Location](#simulate-location)
+    - [Scheme Management](#scheme-management)
+    - [Environment Variable](#environment-variable)
+    - [Test Plan](#test-plan)
+  - [Scheme Template](#scheme-template)
+  - [Swift Package](#swift-package)
+    - [Remote Package](#remote-package)
+    - [Local Package](#local-package)
+  - [Project Reference](#project-reference)
 
 ## Project
 
@@ -80,19 +80,27 @@ One or more specs can be included in the project spec. This can be used to split
 
 Include can either be a list of includes or a single include. They will be merged in order and then the current spec will be merged on top.
 
-An include can be provided via a string (the path) or an object of the form:
+An include can be specified as single value or an array. Each include object may be represented via a string (the path) or an object of the form:
 
 **Include Object**
 
 - [x] **path**: **String** - The path to the included file.
-- [ ] **relativePaths**: **Bool** - Dictates whether the included spec specifies paths relative to itself (the default) or the root spec file.
+- [ ] **relativePaths**: **Bool** - Dictates whether the included spec specifies paths relative to itself or the root spec file. (**import:** defaults to false, **include:** defaults to true)
 - [ ] **enable**: **Bool** - Dictates whether the specified spec should be included or not. You can also specify it by environment variable.
+
+Old sample:
 ```yaml
 include:
   - includedFile.yml
   - path: path/to/includedFile.yml
     relativePaths: false
     enable: ${INCLUDE_ADDITIONAL_YAML}
+```
+
+Newer sample:
+```yaml
+import:
+  - ../../templates/xcodegen/api_template.yml
 ```
 
 By default specs are merged additively. That is for every value:
@@ -401,7 +409,6 @@ Settings are merged in the following order: `groups`, `base`, `configs` (simple 
 - [ ] **postBuildScripts**: **[[Build Script](#build-script)]** - Build scripts that run *after* any other build phases
 - [ ] **buildRules**: **[[Build Rule](#build-rule)]** - Custom build rules
 - [ ] **scheme**: **[Target Scheme](#target-scheme)** - Generated scheme with tests or config variants
-- [ ] **legacy**: **[Legacy Target](#legacy-target)** - When present, opt-in to make an Xcode "External Build System" legacy target instead.
 - [ ] **attributes**: **[String: Any]** - This sets values in the project `TargetAttributes`. It is merged with `attributes` from the project and anything automatically added by XcodeGen, with any duplicate values being override by values specified here. This is for advanced use only. Properties that are already set include:
 	- `DevelopmentTeam`: if all configurations have the same `DEVELOPMENT_TEAM` setting
 	- `ProvisioningStyle`: if all configurations have the same `CODE_SIGN_STYLE` setting
@@ -941,15 +948,6 @@ targets:
   MyUnitTests:
     sources: Tests
 ```
-
-### Legacy Target
-
-By providing a legacy target, you are opting in to the "Legacy Target" mode. This is the "External Build Tool" from the Xcode GUI. This is useful for scripts that you want to run as dependencies of other targets, but you want to make sure that it only runs once even if it is specified as a dependency from multiple other targets.
-
-- [x] ***toolPath***: String - Path to the build tool used in the legacy target.
-- [ ] ***arguments***: String - Build arguments used for the build tool in the legacy target
-- [ ] ***passSettings***: Bool - Whether or not to pass build settings down to the build tool in the legacy target.
-- [ ] ***workingDirectory***: String - The working directory under which the build tool will be invoked in the legacy target.
 
 ## Aggregate Target
 

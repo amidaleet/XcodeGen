@@ -1,22 +1,22 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
-public struct TestableTargetReference: Hashable {
+public struct TestableTargetReference: Hashable, Sendable {
     public var name: String
     public var location: Location
-    
+
     public var targetReference: TargetReference {
         switch location {
         case .local:
-            return TargetReference(name: name, location: .local)
-        case .project(let projectName):
-            return TargetReference(name: name, location: .project(projectName))
+            TargetReference(name: name, location: .local)
+        case let .project(projectName):
+            TargetReference(name: name, location: .project(projectName))
         case .package:
             fatalError("Package target is only available for testable")
         }
     }
 
-    public enum Location: Hashable {
+    public enum Location: Hashable, Sendable {
         case local
         case project(String)
         case package(String)
@@ -67,9 +67,10 @@ extension TestableTargetReference: ExpressibleByStringLiteral {
 extension TestableTargetReference: CustomStringConvertible {
     public var reference: String {
         switch location {
-        case .local: return name
-        case .project(let root), .package(let root):
-            return "\(root)/\(name)"
+        case .local: name
+        case let .project(root),
+             let .package(root):
+            "\(root)/\(name)"
         }
     }
 
@@ -79,7 +80,6 @@ extension TestableTargetReference: CustomStringConvertible {
 }
 
 extension TestableTargetReference: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         if let project: String = jsonDictionary.json(atKeyPath: "project") {
             let paths = project.split(separator: "/")
@@ -90,7 +90,7 @@ extension TestableTargetReference: JSONObjectConvertible {
             name = String(paths[1])
             location = .package(String(paths[0]))
         } else {
-            name = try jsonDictionary.json(atKeyPath: "local")
+            name = try jsonDictionary.jsonStrict(atKeyPath: "local")
             location = .local
         }
     }
@@ -100,9 +100,9 @@ extension TestableTargetReference: JSONEncodable {
     public func toJSONValue() -> Any {
         var dictionary: JSONDictionary = [:]
         switch self.location {
-        case .package(let packageName):
+        case let .package(packageName):
             dictionary["package"] = "\(packageName)/\(name)"
-        case .project(let projectName):
+        case let .project(projectName):
             dictionary["project"] = "\(projectName)/\(name)"
         case .local:
             dictionary["local"] = name

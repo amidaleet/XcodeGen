@@ -1,18 +1,17 @@
 import Foundation
-import ProjectSpec
-import XcodeProj
 import PathKit
+@preconcurrency import ProjectSpec
+@preconcurrency import XcodeProj
 
 private func suitableConfig(for type: ConfigType, in project: Project) -> Config {
     if let defaultConfig = Config.defaultConfigs.first(where: { $0.type == type }),
-        project.configs.contains(defaultConfig) {
+       project.configs.contains(defaultConfig) {
         return defaultConfig
     }
     return project.configs.first { $0.type == type }!
 }
 
-public class SchemeGenerator {
-
+public final class SchemeGenerator {
     let project: Project
     let pbxProj: PBXProj
 
@@ -70,7 +69,6 @@ public class SchemeGenerator {
                     schemes.append((scheme, target))
                 } else {
                     for configVariant in targetScheme.configVariants {
-
                         let schemeName = "\(target.name) \(configVariant)"
 
                         let debugConfig = project.configs
@@ -128,12 +126,11 @@ public class SchemeGenerator {
     }
 
     public func generateScheme(_ scheme: Scheme, for target: ProjectTarget? = nil) throws -> XCScheme {
-
         func getBuildableReference(_ target: TargetReference) throws -> XCScheme.BuildableReference {
             let pbxProj: PBXProj
             let projectFilePath: String
             switch target.location {
-            case .project(let project):
+            case let .project(project):
                 guard let projectReference = self.project.getProjectReference(project) else {
                     throw SchemeGenerationError.missingProject(project)
                 }
@@ -153,12 +150,13 @@ public class SchemeGenerator {
             case .project:
                 buildableName = pbxTarget.productNameWithExtension() ?? pbxTarget.name
             case .local:
-                guard let _buildableName =
+                guard let name =
                     project.getTarget(target.name)?.filename ??
-                    project.getAggregateTarget(target.name)?.name else {
+                    project.getAggregateTarget(target.name)?.name
+                else {
                     fatalError("Unable to determinate \"buildableName\" for build target: \(target)")
                 }
-                buildableName = _buildableName
+                buildableName = name
             }
 
             return XCScheme.BuildableReference(
@@ -168,12 +166,13 @@ public class SchemeGenerator {
                 blueprintName: target.name
             )
         }
-        
+
         func getBuildableTestableReference(_ target: TestableTargetReference) throws -> XCScheme.BuildableReference {
             switch target.location {
-            case .package(let packageName):
+            case let .package(packageName):
                 guard let package = self.project.getPackage(packageName),
-                      case let .local(path, _, _) = package else {
+                      case let .local(path, _, _) = package
+                else {
                     throw SchemeGenerationError.missingPackage(packageName)
                 }
                 return XCScheme.BuildableReference(
@@ -243,21 +242,18 @@ public class SchemeGenerator {
         )
 
         let testables: [XCScheme.TestableReference] = zip(testTargets, testBuildTargetEntries).map { testTarget, testBuildEntries in
-            
             var locationScenarioReference: XCScheme.LocationScenarioReference?
             if var location = testTarget.location {
-                
                 if location.contains(".gpx") {
                     var path = Path(components: [project.options.schemePathPrefix, location])
                     path = path.simplifyingParentDirectoryReferences()
                     location = path.string
                 }
-                
+
                 let referenceType = location.contains(".gpx") ? "0" : "1"
                 locationScenarioReference = XCScheme.LocationScenarioReference(identifier: location, referenceType: referenceType)
-                
             }
-            
+
             return XCScheme.TestableReference(
                 skipped: testTarget.skipped,
                 parallelization: testTarget.parallelizable ? .all : .none,
@@ -284,7 +280,7 @@ public class SchemeGenerator {
 
         let defaultTestPlanIndex = scheme.test?.testPlans.firstIndex { $0.defaultPlan } ?? 0
         let testPlans = scheme.test?.testPlans.enumerated().map { index, testPlan in
-             XCScheme.TestPlanReference(reference: "container:\(testPlan.path)", default: defaultTestPlanIndex == index)
+            XCScheme.TestPlanReference(reference: "container:\(testPlan.path)", default: defaultTestPlanIndex == index)
         } ?? []
         let testBuildableEntries = buildActionEntries.filter({ $0.buildFor.contains(.testing) }) + testBuildTargetEntries
         let testMacroExpansionBuildableRef = testBuildableEntries.map(\.buildableReference).contains(buildableReference) ? buildableReference : testBuildableEntries.first?.buildableReference
@@ -403,7 +399,7 @@ public class SchemeGenerator {
             postActions: scheme.archive?.postActions.map(getExecutionAction) ?? []
         )
 
-        let lastUpgradeVersion = project.attributes["LastUpgradeCheck"] as? String ?? project.xcodeVersion
+        let lastUpgradeVersion = project.attributes["LastUpgradeCheck"]?.stringValue ?? project.xcodeVersion
 
         return XCScheme(
             name: scheme.name,
@@ -419,12 +415,12 @@ public class SchemeGenerator {
                 .flatMap { $0.type.isExtension ? true : nil }
         )
     }
-    
+
     private func launchAutomaticallySubstyle(for target: ProjectTarget?) -> String? {
         if target?.type.isExtension == true {
-            return "2"
+            "2"
         } else {
-            return nil
+            nil
         }
     }
 
@@ -443,24 +439,23 @@ public class SchemeGenerator {
     }
 
     private func selectedDebuggerIdentifier(for target: ProjectTarget?, run: Scheme.Run?) -> String {
-        if target?.type.canUseDebugLauncher != false && run?.debugEnabled ?? Scheme.Run.debugEnabledDefault {
-            return XCScheme.defaultDebugger
+        if target?.type.canUseDebugLauncher != false, run?.debugEnabled ?? Scheme.Run.debugEnabledDefault {
+            XCScheme.defaultDebugger
         } else {
-            return ""
+            ""
         }
     }
 
     private func selectedLauncherIdentifier(for target: ProjectTarget?, run: Scheme.Run?) -> String {
-        if target?.type.canUseDebugLauncher != false && run?.debugEnabled ?? Scheme.Run.debugEnabledDefault {
-            return XCScheme.defaultLauncher
+        if target?.type.canUseDebugLauncher != false, run?.debugEnabled ?? Scheme.Run.debugEnabledDefault {
+            XCScheme.defaultLauncher
         } else {
-            return "Xcode.IDEFoundation.Launcher.PosixSpawn"
+            "Xcode.IDEFoundation.Launcher.PosixSpawn"
         }
     }
 }
 
-enum SchemeGenerationError: Error, CustomStringConvertible {
-
+enum SchemeGenerationError: Error, CustomStringConvertible, Sendable {
     case missingTarget(TargetReference, projectPath: String)
     case missingPackage(String)
     case missingProject(String)
@@ -468,14 +463,14 @@ enum SchemeGenerationError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .missingTarget(let target, let projectPath):
-            return "Unable to find target named \"\(target)\" in \"\(projectPath)\""
-        case .missingProject(let project):
-            return "Unable to find project reference named \"\(project)\" in project.yml"
-        case .missingBuildTargets(let name):
-            return "Unable to find at least one build target in scheme \"\(name)\""
-        case .missingPackage(let package):
-            return "Unable to find swift package named \"\(package)\" in project.yml"
+        case let .missingTarget(target, projectPath):
+            "Unable to find target named \"\(target)\" in \"\(projectPath)\""
+        case let .missingProject(project):
+            "Unable to find project reference named \"\(project)\" in project.yml"
+        case let .missingBuildTargets(name):
+            "Unable to find at least one build target in scheme \"\(name)\""
+        case let .missingPackage(package):
+            "Unable to find swift package named \"\(package)\" in project.yml"
         }
     }
 }
@@ -531,7 +526,8 @@ extension Scheme {
     private static func buildTargets(for target: ProjectTarget, project: Project) -> [BuildTarget] {
         let buildTarget = Scheme.BuildTarget(target: TestableTargetReference.local(target.name))
         switch target.type {
-        case .watchApp, .watch2App:
+        case .watchApp,
+             .watch2App:
             let hostTarget = project.targets
                 .first { projectTarget in
                     projectTarget.dependencies.contains { $0.reference == target.name }
@@ -547,15 +543,16 @@ extension Scheme {
 extension PBXProductType {
     var canUseDebugLauncher: Bool {
         // Extensions don't use the lldb launcher
-        return !isExtension
+        !isExtension
     }
 
     var isWatchApp: Bool {
         switch self {
-        case .watchApp, .watch2App:
-            return true
+        case .watchApp,
+             .watch2App:
+            true
         default:
-            return false
+            false
         }
     }
 }
@@ -564,11 +561,11 @@ extension Scheme.Test {
     var systemAttachmentLifetime: XCScheme.TestAction.AttachmentLifetime? {
         switch (captureScreenshotsAutomatically, deleteScreenshotsWhenEachTestSucceeds) {
         case (false, _):
-            return .keepNever
+            .keepNever
         case (true, false):
-            return .keepAlways
+            .keepAlways
         case (true, true):
-            return nil
+            nil
         }
     }
 }

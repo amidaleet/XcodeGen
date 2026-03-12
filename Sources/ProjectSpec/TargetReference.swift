@@ -1,11 +1,11 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
-public struct TargetReference: Hashable {
+public struct TargetReference: Hashable, Sendable {
     public var name: String
     public var location: Location
 
-    public enum Location: Hashable {
+    public enum Location: Hashable, Sendable {
         case local
         case project(String)
     }
@@ -45,9 +45,9 @@ extension TargetReference: ExpressibleByStringLiteral {
 extension TargetReference: CustomStringConvertible {
     public var reference: String {
         switch location {
-        case .local: return name
-        case .project(let root):
-            return "\(root)/\(name)"
+        case .local: name
+        case let .project(root):
+            "\(root)/\(name)"
         }
     }
 

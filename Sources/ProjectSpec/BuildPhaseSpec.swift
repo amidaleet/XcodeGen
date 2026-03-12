@@ -1,15 +1,15 @@
 //
 //  File.swift
-//  
+//
 //
 //  Created by Yonas Kolb on 1/5/20.
 //
 
 import Foundation
+import JSONutils
 import XcodeProj
-import JSONUtilities
 
-public enum BuildPhaseSpec: Equatable {
+public enum BuildPhaseSpec: Hashable, Sendable {
     case sources
     case headers
     case resources
@@ -20,7 +20,7 @@ public enum BuildPhaseSpec: Equatable {
     case runScript
     case carbonResources
 
-    public struct CopyFilesSettings: Equatable, Hashable {
+    public struct CopyFilesSettings: Hashable, Sendable {
         public static let xpcServices = CopyFilesSettings(
             destination: .productsDirectory,
             subpath: "$(CONTENTS_FOLDER_PATH)/XPCServices",
@@ -33,7 +33,7 @@ public enum BuildPhaseSpec: Equatable {
             phaseOrder: .postCompile
         )
 
-        public enum Destination: String {
+        public enum Destination: String, Sendable {
             case absolutePath
             case productsDirectory
             case wrapper
@@ -47,21 +47,21 @@ public enum BuildPhaseSpec: Equatable {
 
             public var destination: PBXCopyFilesBuildPhase.SubFolder? {
                 switch self {
-                case .absolutePath: return .absolutePath
-                case .productsDirectory: return .productsDirectory
-                case .wrapper: return .wrapper
-                case .executables: return .executables
-                case .resources: return .resources
-                case .javaResources: return .javaResources
-                case .frameworks: return .frameworks
-                case .sharedFrameworks: return .sharedFrameworks
-                case .sharedSupport: return .sharedSupport
-                case .plugins: return .plugins
+                case .absolutePath: .absolutePath
+                case .productsDirectory: .productsDirectory
+                case .wrapper: .wrapper
+                case .executables: .executables
+                case .resources: .resources
+                case .javaResources: .javaResources
+                case .frameworks: .frameworks
+                case .sharedFrameworks: .sharedFrameworks
+                case .sharedSupport: .sharedSupport
+                case .plugins: .plugins
                 }
             }
         }
 
-        public enum PhaseOrder: String {
+        public enum PhaseOrder: String, Sendable {
             /// Run before the Compile Sources phase
             case preCompile
             /// Run after the Compile Sources and post-compile Run Script phases
@@ -85,20 +85,19 @@ public enum BuildPhaseSpec: Equatable {
 
     public var buildPhase: BuildPhase? {
         switch self {
-        case .sources: return .sources
-        case .headers: return .headers
-        case .resources: return .resources
-        case .copyFiles: return .copyFiles
-        case .frameworks: return .frameworks
-        case .runScript: return .runScript
-        case .carbonResources: return .carbonResources
-        case .none: return nil
+        case .sources: .sources
+        case .headers: .headers
+        case .resources: .resources
+        case .copyFiles: .copyFiles
+        case .frameworks: .frameworks
+        case .runScript: .runScript
+        case .carbonResources: .carbonResources
+        case .none: nil
         }
     }
 }
 
 extension BuildPhaseSpec {
-
     public init(string: String) throws {
         switch string {
         case "sources": self = .sources
@@ -114,20 +113,19 @@ extension BuildPhaseSpec {
 }
 
 extension BuildPhaseSpec: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        self = .copyFiles(try jsonDictionary.json(atKeyPath: "copyFiles"))
+        self = .copyFiles(try jsonDictionary.jsonStrict(atKeyPath: "copyFiles"))
     }
 }
 
 extension BuildPhaseSpec: JSONEncodable {
     public func toJSONValue() -> Any {
         switch self {
-        case .sources: return "sources"
-        case .headers: return "headers"
-        case .resources: return "resources"
-        case .copyFiles(let files): return ["copyFiles": files.toJSONValue()]
-        case .none: return "none"
+        case .sources: "sources"
+        case .headers: "headers"
+        case .resources: "resources"
+        case let .copyFiles(files): ["copyFiles": files.toJSONValue()]
+        case .none: "none"
         case .frameworks: fatalError("invalid build phase")
         case .runScript: fatalError("invalid build phase")
         case .carbonResources: fatalError("invalid build phase")
@@ -136,9 +134,8 @@ extension BuildPhaseSpec: JSONEncodable {
 }
 
 extension BuildPhaseSpec.CopyFilesSettings: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        destination = try jsonDictionary.json(atKeyPath: "destination")
+        destination = try jsonDictionary.jsonStrict(atKeyPath: "destination")
         subpath = jsonDictionary.json(atKeyPath: "subpath") ?? ""
         phaseOrder = .postCompile
     }

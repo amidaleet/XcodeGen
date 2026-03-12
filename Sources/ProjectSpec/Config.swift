@@ -1,7 +1,7 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
-public struct Config: Hashable {
+public struct Config: Hashable, Sendable {
     public var name: String
     public var type: ConfigType?
 
@@ -10,20 +10,19 @@ public struct Config: Hashable {
         self.type = type
     }
 
-    public static var defaultConfigs: [Config] = [Config(name: ConfigType.debug.name, type: .debug), Config(name: ConfigType.release.name, type: .release)]
+    public static let defaultConfigs: [Config] = [Config(name: ConfigType.debug.name, type: .debug), Config(name: ConfigType.release.name, type: .release)]
 }
 
-public enum ConfigType: String, Hashable {
+public enum ConfigType: String, Hashable, Sendable {
     case debug
     case release
-    
+
     public var name: String {
         rawValue.prefix(1).uppercased() + rawValue.dropFirst()
     }
 }
 
 extension Config {
-
     public func matchesVariant(_ variant: String, for type: ConfigType) -> Bool {
         guard self.type == type else { return false }
         let nameWithoutType = self.name.lowercased()
@@ -33,9 +32,8 @@ extension Config {
     }
 }
 
-public extension Collection where Element == Config {
-    func first(including configVariant: String, for type: ConfigType) -> Config? {
+extension Collection where Element == Config {
+    public func first(including configVariant: String, for type: ConfigType) -> Config? {
         first { $0.matchesVariant(configVariant, for: type) }
     }
 }
-

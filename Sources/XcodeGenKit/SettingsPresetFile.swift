@@ -12,23 +12,23 @@ public enum SettingsPresetFile {
 
     var path: String {
         switch self {
-        case let .config(config): return "Configs/\(config.rawValue)"
-        case let .platform(platform): return "Platforms/\(platform.rawValue)"
-        case let .supportedDestination(supportedDestination): return "SupportedDestinations/\(supportedDestination.rawValue)"
-        case let .product(product): return "Products/\(product.name)"
-        case let .productPlatform(product, platform): return "Product_Platform/\(product.name)_\(platform.rawValue)"
-        case .base: return "base"
+        case let .config(config): "Configs/\(config.rawValue)"
+        case let .platform(platform): "Platforms/\(platform.rawValue)"
+        case let .supportedDestination(supportedDestination): "SupportedDestinations/\(supportedDestination.rawValue)"
+        case let .product(product): "Products/\(product.name)"
+        case let .productPlatform(product, platform): "Product_Platform/\(product.name)_\(platform.rawValue)"
+        case .base: "base"
         }
     }
 
     var name: String {
         switch self {
-        case let .config(config): return "\(config.rawValue) config"
-        case let .platform(platform): return platform.rawValue
-        case let .supportedDestination(supportedDestination): return supportedDestination.rawValue
-        case let .product(product): return product.name
-        case let .productPlatform(product, platform): return "\(platform) \(product)"
-        case .base: return "base"
+        case let .config(config): "\(config.rawValue) config"
+        case let .platform(platform): platform.rawValue
+        case let .supportedDestination(supportedDestination): supportedDestination.rawValue
+        case let .product(product): product.name
+        case let .productPlatform(product, platform): "\(platform) \(product)"
+        case .base: "base"
         }
     }
 }

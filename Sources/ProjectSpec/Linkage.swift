@@ -1,14 +1,13 @@
 import Foundation
 import XcodeProj
 
-public enum Linkage {
+public enum Linkage: Hashable, Sendable {
     case dynamic
     case `static`
     case none
 }
 
 extension Target {
-
     public var defaultLinkage: Linkage {
         switch type {
         case .none,
@@ -37,25 +36,26 @@ extension Target {
              .systemExtension,
              .driverExtension,
              .extensionKitExtension:
-            return .none
-        case .framework, .xcFramework:
+            .none
+        case .framework,
+             .xcFramework:
             // Check the MACH_O_TYPE for "Static Framework"
             if settings.buildSettings.machOType == "staticlib" {
-                return .static
+                .static
             } else {
-                return .dynamic
+                .dynamic
             }
         case .dynamicLibrary:
-            return .dynamic
-        case .staticLibrary, .staticFramework:
-            return .static
+            .dynamic
+        case .staticLibrary,
+             .staticFramework:
+            .static
         }
     }
 }
 
-private extension BuildSettings {
-
-    var machOType: String? {
+extension BuildSettings {
+    fileprivate var machOType: String? {
         self["MACH_O_TYPE"]?.stringValue
     }
 }

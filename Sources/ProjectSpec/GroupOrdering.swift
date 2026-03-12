@@ -1,9 +1,8 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
 /// Describes an order of groups.
 public struct GroupOrdering: Equatable {
-
     /// A group name pattern.
     public var pattern: String
 
@@ -18,15 +17,12 @@ public struct GroupOrdering: Equatable {
         self.regex = try? NSRegularExpression(pattern: pattern)
         self.order = order
     }
-
 }
 
 extension GroupOrdering: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         pattern = jsonDictionary.json(atKeyPath: "pattern") ?? ""
         regex = try? NSRegularExpression(pattern: pattern)
         order = jsonDictionary.json(atKeyPath: "order") ?? []
     }
-
 }

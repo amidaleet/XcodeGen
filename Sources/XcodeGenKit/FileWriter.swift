@@ -3,8 +3,7 @@ import PathKit
 import ProjectSpec
 import XcodeProj
 
-public class FileWriter {
-
+public final class FileWriter {
     let project: Project
 
     public init(project: Project) {
@@ -25,7 +24,6 @@ public class FileWriter {
     }
 
     public func writePlists() throws {
-
         let infoPlistGenerator = InfoPlistGenerator()
         for target in project.targets {
             // write Info.plist
@@ -44,7 +42,7 @@ public class FileWriter {
     private func writePlist(_ plist: [String: Any], path: String) throws {
         let path = project.basePath + path
         if path.exists, let data: Data = try? path.read(),
-            let existingPlist = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any], NSDictionary(dictionary: plist).isEqual(to: existingPlist) {
+           let existingPlist = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any], NSDictionary(dictionary: plist).isEqual(to: existingPlist) {
             // file is the same
             return
         }

@@ -1,10 +1,12 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
+import ToolsCore
+import XcodeGenCore
 import Yams
 
 extension Dictionary where Key: JSONKey {
-    public func json<T: NamedJSONDictionaryConvertible>(atKeyPath keyPath: JSONUtilities.KeyPath, invalidItemBehaviour: InvalidItemBehaviour<T> = .remove, parallel: Bool = false) throws -> [T] {
+    public func json<T: NamedJSONDictionaryConvertible>(atKeyPath keyPath: JSONutils.KeyPath, invalidItemBehaviour _: InvalidItemBehaviour<T> = .remove, parallel: Bool = false) throws -> [T] {
         guard let dictionary = json(atKeyPath: keyPath) as JSONDictionary? else {
             return []
         }
@@ -13,15 +15,16 @@ extension Dictionary where Key: JSONKey {
             let keys = Array(dictionary.keys)
             var itemResults: [Result<T, Error>] = Array(repeating: .failure(defaultError), count: keys.count)
             itemResults.withUnsafeMutableBufferPointer { buffer in
-                let bufferWrapper = BufferWrapper(buffer: buffer)
+                let bufferBox = UncheckedSendable(buffer)
+                let dictionaryBox = UncheckedSendable(dictionary)
                 DispatchQueue.concurrentPerform(iterations: dictionary.count) { idx in
                     do {
                         let key = keys[idx]
-                        let jsonDictionary: JSONDictionary = try dictionary.json(atKeyPath: .key(key))
+                        let jsonDictionary: JSONDictionary = try dictionaryBox.subject.jsonStrict(atKeyPath: .key(key))
                         let item = try T(name: key, jsonDictionary: jsonDictionary)
-                        bufferWrapper.buffer[idx] = .success(item)
+                        bufferBox.subject[idx] = .success(item)
                     } catch {
-                        bufferWrapper.buffer[idx] = .failure(error)
+                        bufferBox.subject[idx] = .failure(error)
                     }
                 }
             }
@@ -29,7 +32,7 @@ extension Dictionary where Key: JSONKey {
         } else {
             var items: [T] = []
             for (key, _) in dictionary {
-                let jsonDictionary: JSONDictionary = try dictionary.json(atKeyPath: .key(key))
+                let jsonDictionary: JSONDictionary = try dictionary.jsonStrict(atKeyPath: .key(key))
                 let item = try T(name: key, jsonDictionary: jsonDictionary)
                 items.append(item)
             }
@@ -37,7 +40,7 @@ extension Dictionary where Key: JSONKey {
         }
     }
 
-    public func json<T: NamedJSONConvertible>(atKeyPath keyPath: JSONUtilities.KeyPath, invalidItemBehaviour: InvalidItemBehaviour<T> = .remove) throws -> [T] {
+    public func json<T: NamedJSONConvertible>(atKeyPath keyPath: JSONutils.KeyPath, invalidItemBehaviour _: InvalidItemBehaviour<T> = .remove) throws -> [T] {
         guard let dictionary = json(atKeyPath: keyPath) as JSONDictionary? else {
             return []
         }
@@ -50,29 +53,18 @@ extension Dictionary where Key: JSONKey {
     }
 }
 
-private final class BufferWrapper<T>: @unchecked Sendable {
-    var buffer: UnsafeMutableBufferPointer<T>
-
-    init(buffer: UnsafeMutableBufferPointer<T>) {
-        self.buffer = buffer
-    }
-}
-
 public protocol NamedJSONDictionaryConvertible {
-
     init(name: String, jsonDictionary: JSONDictionary) throws
 }
 
 public protocol NamedJSONConvertible {
-
     init(name: String, json: Any) throws
 }
 
 extension JSONObjectConvertible {
-
     public init(path: Path) throws {
         let content: String = try path.read()
-        if content == "" {
+        if content.isEmpty {
             try self.init(jsonDictionary: [:])
             return
         }

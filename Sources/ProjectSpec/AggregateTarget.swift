@@ -1,5 +1,5 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import XcodeProj
 
 public struct AggregateTarget: ProjectTarget {
@@ -11,7 +11,7 @@ public struct AggregateTarget: ProjectTarget {
     public var buildToolPlugins: [BuildToolPlugin]
     public var configFiles: [String: String]
     public var scheme: TargetScheme?
-    public var attributes: [String: Any]
+    public var attributes: [String: ProjectAttribute]
 
     public init(
         name: String,
@@ -21,7 +21,7 @@ public struct AggregateTarget: ProjectTarget {
         buildScripts: [BuildScript] = [],
         buildToolPlugins: [BuildToolPlugin] = [],
         scheme: TargetScheme? = nil,
-        attributes: [String: Any] = [:]
+        attributes: [String: ProjectAttribute] = [:]
     ) {
         self.name = name
         self.targets = targets
@@ -35,14 +35,12 @@ public struct AggregateTarget: ProjectTarget {
 }
 
 extension AggregateTarget: CustomStringConvertible {
-
     public var description: String {
         "\(name)\(targets.isEmpty ? "" : ": \(targets.joined(separator: ", "))")"
     }
 }
 
 extension AggregateTarget: Equatable {
-
     public static func == (lhs: AggregateTarget, rhs: AggregateTarget) -> Bool {
         lhs.name == rhs.name &&
             lhs.targets == rhs.targets &&
@@ -56,7 +54,6 @@ extension AggregateTarget: Equatable {
 }
 
 extension AggregateTarget: NamedJSONDictionaryConvertible {
-
     public init(name: String, jsonDictionary: JSONDictionary) throws {
         self.name = jsonDictionary.json(atKeyPath: "name") ?? name
         targets = jsonDictionary.json(atKeyPath: "targets") ?? []
@@ -65,7 +62,7 @@ extension AggregateTarget: NamedJSONDictionaryConvertible {
         buildScripts = jsonDictionary.json(atKeyPath: "buildScripts") ?? []
         buildToolPlugins = jsonDictionary.json(atKeyPath: "buildToolPlugins") ?? []
         scheme = jsonDictionary.json(atKeyPath: "scheme")
-        attributes = jsonDictionary.json(atKeyPath: "attributes") ?? [:]
+        attributes = try jsonDictionary.json(atKeyPath: "attributes")?.asProjectAttributes() ?? [:]
     }
 }
 
@@ -84,7 +81,6 @@ extension AggregateTarget: JSONEncodable {
 }
 
 extension AggregateTarget: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .dictionary([

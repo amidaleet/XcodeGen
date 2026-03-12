@@ -1,5 +1,5 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import XcodeProj
 
 public struct TargetScheme: Equatable {
@@ -68,17 +68,16 @@ public struct TargetScheme: Equatable {
 }
 
 extension TargetScheme: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         if let targets = jsonDictionary["testTargets"] as? [Any] {
             testTargets = try targets.compactMap { target in
                 if let string = target as? String {
-                    return .init(targetReference: try TestableTargetReference(string))
+                    .init(targetReference: try TestableTargetReference(string))
                 } else if let dictionary = target as? JSONDictionary,
                           let target: Scheme.Test.TestTarget = try? .init(jsonDictionary: dictionary) {
-                    return target
+                    target
                 } else {
-                    return nil
+                    nil
                 }
             }
         } else {
@@ -88,12 +87,12 @@ extension TargetScheme: JSONObjectConvertible {
         if let targets = jsonDictionary["coverageTargets"] as? [Any] {
             coverageTargets = try targets.compactMap { target in
                 if let string = target as? String {
-                    return try TestableTargetReference(string)
+                    try TestableTargetReference(string)
                 } else if let dictionary = target as? JSONDictionary,
                           let target: TestableTargetReference = try? .init(jsonDictionary: dictionary) {
-                    return target
+                    target
                 } else {
-                    return nil
+                    nil
                 }
             }
         } else {
@@ -101,7 +100,7 @@ extension TargetScheme: JSONObjectConvertible {
         }
 
         testPlans = try (jsonDictionary.json(atKeyPath: "testPlans") ?? []).map { try TestPlan(jsonDictionary: $0) }
-        configVariants = jsonDictionary.json(atKeyPath: "configVariants") ?? []
+        configVariants = jsonDictionary["configVariants"] as? [String] ?? []
         gatherCoverageData = jsonDictionary.json(atKeyPath: "gatherCoverageData") ?? TargetScheme.gatherCoverageDataDefault
         storeKitConfiguration = jsonDictionary.json(atKeyPath: "storeKitConfiguration")
         language = jsonDictionary.json(atKeyPath: "language")
@@ -110,7 +109,7 @@ extension TargetScheme: JSONObjectConvertible {
         stopOnEveryMainThreadCheckerIssue = jsonDictionary.json(atKeyPath: "stopOnEveryMainThreadCheckerIssue") ?? TargetScheme.stopOnEveryMainThreadCheckerIssueDefault
         disableThreadPerformanceChecker = jsonDictionary.json(atKeyPath: "disableThreadPerformanceChecker") ?? TargetScheme.disableThreadPerformanceCheckerDefault
         buildImplicitDependencies = jsonDictionary.json(atKeyPath: "buildImplicitDependencies") ?? TargetScheme.buildImplicitDependenciesDefault
-        commandLineArguments = jsonDictionary.json(atKeyPath: "commandLineArguments") ?? [:]
+        commandLineArguments = jsonDictionary["commandLineArguments"] as? [String: Bool] ?? [:]
         environmentVariables = try XCScheme.EnvironmentVariable.parseAll(jsonDictionary: jsonDictionary)
         preActions = jsonDictionary.json(atKeyPath: "preActions") ?? []
         postActions = jsonDictionary.json(atKeyPath: "postActions") ?? []
@@ -122,7 +121,7 @@ extension TargetScheme: JSONEncodable {
     public func toJSONValue() -> Any {
         var dict: [String: Any] = [
             "configVariants": configVariants,
-            "coverageTargets": coverageTargets.map { $0.reference },
+            "coverageTargets": coverageTargets.map(\.reference),
             "commandLineArguments": commandLineArguments,
             "testTargets": testTargets.map { $0.toJSONValue() },
             "testPlans": testPlans.map { $0.toJSONValue() },
@@ -172,7 +171,6 @@ extension TargetScheme: JSONEncodable {
 }
 
 extension TargetScheme: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .object("testPlans", TestPlan.pathProperties),

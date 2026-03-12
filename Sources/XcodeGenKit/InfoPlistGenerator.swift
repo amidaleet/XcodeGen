@@ -2,8 +2,7 @@ import Foundation
 import PathKit
 import ProjectSpec
 
-public class InfoPlistGenerator {
-
+public final class InfoPlistGenerator {
     /**
      Default info plist attributes taken from:
      /Applications/Xcode.app/Contents/Developer/Library/Xcode/Templates/Project Templates/Base/Base_DefinitionsInfoPlist.xctemplate/TemplateInfo.plist

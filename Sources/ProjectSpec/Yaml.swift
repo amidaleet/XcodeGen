@@ -1,5 +1,6 @@
 import Foundation
 import PathKit
+import XcodeGenCore
 import Yams
 
 public func loadYamlDictionary(path: Path) throws -> [String: Any] {

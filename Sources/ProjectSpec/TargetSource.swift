@@ -1,16 +1,16 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 
-public struct TargetSource: Equatable {
+public struct TargetSource: Hashable, Sendable {
     public static let optionalDefault = false
-    
+
     public var path: String {
         didSet {
             path = (path as NSString).standardizingPath
         }
     }
-    
+
     public var name: String?
     public var group: String?
     public var compilerFlags: [String]
@@ -27,16 +27,16 @@ public struct TargetSource: Equatable {
     public var inferDestinationFiltersByPath: Bool?
     public var destinationFilters: [SupportedDestination]?
 
-    public enum HeaderVisibility: String {
+    public enum HeaderVisibility: String, Sendable {
         case `public`
         case `private`
         case project
 
         public var settingName: String {
             switch self {
-            case .public: return "Public"
-            case .private: return "Private"
-            case .project: return "Project"
+            case .public: "Public"
+            case .private: "Private"
+            case .project: "Project"
             }
         }
     }
@@ -79,7 +79,6 @@ public struct TargetSource: Equatable {
 }
 
 extension TargetSource: ExpressibleByStringLiteral {
-
     public init(stringLiteral value: String) {
         self = TargetSource(path: value)
     }
@@ -94,9 +93,8 @@ extension TargetSource: ExpressibleByStringLiteral {
 }
 
 extension TargetSource: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        path = try jsonDictionary.json(atKeyPath: "path")
+        path = try jsonDictionary.jsonStrict(atKeyPath: "path")
         path = (path as NSString).standardizingPath // Done in two steps as the compiler can't figure out the types otherwise
         name = jsonDictionary.json(atKeyPath: "name")
         group = jsonDictionary.json(atKeyPath: "group")
@@ -122,9 +120,9 @@ extension TargetSource: JSONObjectConvertible {
         createIntermediateGroups = jsonDictionary.json(atKeyPath: "createIntermediateGroups")
         attributes = jsonDictionary.json(atKeyPath: "attributes") ?? []
         resourceTags = jsonDictionary.json(atKeyPath: "resourceTags") ?? []
-        
+
         inferDestinationFiltersByPath = jsonDictionary.json(atKeyPath: "inferDestinationFiltersByPath")
-        
+
         if let destinationFilters: [SupportedDestination] = jsonDictionary.json(atKeyPath: "destinationFilters") {
             self.destinationFilters = destinationFilters
         }
@@ -147,7 +145,7 @@ extension TargetSource: JSONEncodable {
             "resourceTags": resourceTags,
             "path": path,
             "inferDestinationFiltersByPath": inferDestinationFiltersByPath,
-            "destinationFilters": destinationFilters?.map { $0.rawValue },
+            "destinationFilters": destinationFilters?.map(\.rawValue),
         ]
 
         if optional != TargetSource.optionalDefault {
@@ -159,7 +157,6 @@ extension TargetSource: JSONEncodable {
 }
 
 extension TargetSource: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("path"),

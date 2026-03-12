@@ -1,39 +1,9 @@
 import Foundation
-import JSONUtilities
-import XcodeProj
+import JSONutils
 import Version
+import XcodeProj
 
-public struct LegacyTarget: Equatable {
-    public static let passSettingsDefault = false
-
-    public var toolPath: String
-    public var arguments: String?
-    public var passSettings: Bool
-    public var workingDirectory: String?
-
-    public init(
-        toolPath: String,
-        passSettings: Bool = passSettingsDefault,
-        arguments: String? = nil,
-        workingDirectory: String? = nil
-    ) {
-        self.toolPath = toolPath
-        self.arguments = arguments
-        self.passSettings = passSettings
-        self.workingDirectory = workingDirectory
-    }
-}
-
-extension LegacyTarget: PathContainer {
-
-    static var pathProperties: [PathProperty] {
-        [
-            .string("workingDirectory"),
-        ]
-    }
-}
-
-public struct Target: ProjectTarget {
+public struct Target: ProjectTarget, @unchecked Sendable {
     public var name: String
     public var type: PBXProductType
     public var platform: Platform
@@ -53,16 +23,11 @@ public struct Target: ProjectTarget {
     public var buildRules: [BuildRule]
     public var configFiles: [String: String]
     public var scheme: TargetScheme?
-    public var legacy: LegacyTarget?
     public var deploymentTarget: Version?
-    public var attributes: [String: Any]
+    public var attributes: [String: ProjectAttribute]
     public var productName: String
     public var onlyCopyFilesOnInstall: Bool
     public var putResourcesBeforeSourcesBuildPhase: Bool
-    
-    public var isLegacy: Bool {
-        legacy != nil
-    }
 
     public var filename: String {
         var filename = productName
@@ -97,8 +62,7 @@ public struct Target: ProjectTarget {
         postBuildScripts: [BuildScript] = [],
         buildRules: [BuildRule] = [],
         scheme: TargetScheme? = nil,
-        legacy: LegacyTarget? = nil,
-        attributes: [String: Any] = [:],
+        attributes: [String: ProjectAttribute] = [:],
         onlyCopyFilesOnInstall: Bool = false,
         putResourcesBeforeSourcesBuildPhase: Bool = false
     ) {
@@ -123,7 +87,6 @@ public struct Target: ProjectTarget {
         self.postBuildScripts = postBuildScripts
         self.buildRules = buildRules
         self.scheme = scheme
-        self.legacy = legacy
         self.attributes = attributes
         self.onlyCopyFilesOnInstall = onlyCopyFilesOnInstall
         self.putResourcesBeforeSourcesBuildPhase = putResourcesBeforeSourcesBuildPhase
@@ -131,14 +94,12 @@ public struct Target: ProjectTarget {
 }
 
 extension Target: CustomStringConvertible {
-
     public var description: String {
         "\(name): \(platform.rawValue) \(type)"
     }
 }
 
 extension Target: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .dictionary([
@@ -152,7 +113,6 @@ extension Target: PathContainer {
                 .object("prebuildScripts", BuildScript.pathProperties),
                 .object("postCompileScripts", BuildScript.pathProperties),
                 .object("postBuildScripts", BuildScript.pathProperties),
-                .object("legacy", LegacyTarget.pathProperties),
                 .object("scheme", TargetScheme.pathProperties),
             ]),
         ]
@@ -160,62 +120,64 @@ extension Target: PathContainer {
 }
 
 extension Target {
-
-    static func resolveMultiplatformTargets(jsonDictionary: JSONDictionary) -> JSONDictionary {
+    static func resolveMultiplatformTargets(_ jsonDictionary: inout JSONDictionary) {
         guard let targetsDictionary: [String: JSONDictionary] = jsonDictionary["targets"] as? [String: JSONDictionary] else {
-            return jsonDictionary
+            return
         }
-        
-        var crossPlatformTargets: [String: JSONDictionary] = [:]
 
-        for (targetName, target) in targetsDictionary {
-            if let platforms = target["platform"] as? [String] {
-                for platform in platforms {
-                    var platformTarget = target
-                    
-                    /// This value is set to help us to check, in Target init, that there are no conflicts in the definition of the platforms. We want to ensure that the user didn't define, at the same time,
-                    /// the new Xcode 14 supported destinations and the XcodeGen generation of Multiple Platform Targets (when you define the platform field as an array).
-                    platformTarget["isMultiPlatformTarget"] = true
+        let targetsToSplit: [String: [String]] = targetsDictionary.reduce(into: [:]) { result, target in
+            guard let platforms = target.value["platform"] as? [String] else { return }
+            result[target.key] = platforms
+        }
+        guard !targetsToSplit.isEmpty else {
+            return
+        }
 
-                    platformTarget = platformTarget.expand(variables: ["platform": platform])
+        var resolvedTargets: [String: JSONDictionary] = targetsDictionary
+        resolvedTargets.reserveCapacity(resolvedTargets.count + targetsToSplit.reduce(into: 0) { $0 += $1.value.count })
 
-                    platformTarget["platform"] = platform
-                    let platformSuffix = platformTarget["platformSuffix"] as? String ?? "_\(platform)"
-                    let platformPrefix = platformTarget["platformPrefix"] as? String ?? ""
-                    let newTargetName = platformPrefix + targetName + platformSuffix
+        for (targetName, platforms) in targetsToSplit {
+            resolvedTargets.removeValue(forKey: targetName)
+            for platform in platforms {
+                var platformTarget = targetsDictionary[targetName]!
 
-                    var settings = platformTarget["settings"] as? JSONDictionary ?? [:]
-                    if settings["configs"] != nil || settings["groups"] != nil || settings["base"] != nil {
-                        var base = settings["base"] as? JSONDictionary ?? [:]
-                        if base["PRODUCT_NAME"] == nil {
-                            base["PRODUCT_NAME"] = targetName
-                        }
-                        settings["base"] = base
-                    } else {
-                        if settings["PRODUCT_NAME"] == nil {
-                            settings["PRODUCT_NAME"] = targetName
-                        }
+                /// This value is set to help us to check, in Target init, that there are no conflicts in the definition of the platforms. We want to ensure that the user didn't define, at the same time,
+                /// the new Xcode 14 supported destinations and the XcodeGen generation of Multiple Platform Targets (when you define the platform field as an array).
+                platformTarget["isMultiPlatformTarget"] = true
+
+                platformTarget = platformTarget.expandVariables(["platform": platform])
+
+                platformTarget["platform"] = platform
+                let platformSuffix = platformTarget["platformSuffix"] as? String ?? "_\(platform)"
+                let platformPrefix = platformTarget["platformPrefix"] as? String ?? ""
+                let newTargetName = platformPrefix + targetName + platformSuffix
+
+                var settings = platformTarget["settings"] as? JSONDictionary ?? [:]
+                if settings["configs"] != nil || settings["groups"] != nil || settings["base"] != nil {
+                    var base = settings["base"] as? JSONDictionary ?? [:]
+                    if base["PRODUCT_NAME"] == nil {
+                        base["PRODUCT_NAME"] = targetName
                     }
-                    platformTarget["productName"] = targetName
-                    platformTarget["settings"] = settings
-                    if let deploymentTargets = target["deploymentTarget"] as? [String: Any] {
-                        platformTarget["deploymentTarget"] = deploymentTargets[platform]
+                    settings["base"] = base
+                } else {
+                    if settings["PRODUCT_NAME"] == nil {
+                        settings["PRODUCT_NAME"] = targetName
                     }
-                    crossPlatformTargets[newTargetName] = platformTarget
                 }
-            } else {
-                crossPlatformTargets[targetName] = target
+                platformTarget["productName"] = targetName
+                platformTarget["settings"] = settings
+                if let deploymentTargets = platformTarget["deploymentTarget"] as? [String: Any] {
+                    platformTarget["deploymentTarget"] = deploymentTargets[platform]
+                }
+                resolvedTargets[newTargetName] = platformTarget
             }
         }
-        
-        var merged = jsonDictionary
-        merged["targets"] = crossPlatformTargets
-        return merged
+
+        jsonDictionary["targets"] = resolvedTargets
     }
 }
 
 extension Target: Equatable {
-
     public static func == (lhs: Target, rhs: Target) -> Bool {
         lhs.name == rhs.name &&
             lhs.type == rhs.type &&
@@ -236,61 +198,33 @@ extension Target: Equatable {
             lhs.postBuildScripts == rhs.postBuildScripts &&
             lhs.buildRules == rhs.buildRules &&
             lhs.scheme == rhs.scheme &&
-            lhs.legacy == rhs.legacy &&
             NSDictionary(dictionary: lhs.attributes).isEqual(to: rhs.attributes)
     }
 }
 
-extension LegacyTarget: JSONObjectConvertible {
-
-    public init(jsonDictionary: JSONDictionary) throws {
-        toolPath = try jsonDictionary.json(atKeyPath: "toolPath")
-        arguments = jsonDictionary.json(atKeyPath: "arguments")
-        passSettings = jsonDictionary.json(atKeyPath: "passSettings") ?? LegacyTarget.passSettingsDefault
-        workingDirectory = jsonDictionary.json(atKeyPath: "workingDirectory")
-    }
-}
-
-extension LegacyTarget: JSONEncodable {
-    public func toJSONValue() -> Any {
-        var dict: [String: Any?] = [
-            "toolPath": toolPath,
-            "arguments": arguments,
-            "workingDirectory": workingDirectory,
-        ]
-
-        if passSettings != LegacyTarget.passSettingsDefault {
-            dict["passSettings"] = passSettings
-        }
-
-        return dict
-    }
-}
-
 extension Target: NamedJSONDictionaryConvertible {
-
     public init(name: String, jsonDictionary: JSONDictionary) throws {
-        let resolvedName: String = jsonDictionary.json(atKeyPath: "name") ?? name
+        let resolvedName: String = jsonDictionary["name"] as? String ?? name
         self.name = resolvedName
-        productName = jsonDictionary.json(atKeyPath: "productName") ?? resolvedName
-        
-        let typeString: String = jsonDictionary.json(atKeyPath: "type") ?? ""
+        productName = jsonDictionary["productName"] as? String ?? resolvedName
+
+        let typeString: String = jsonDictionary["type"] as? String ?? ""
         if let type = PBXProductType(string: typeString) {
             self.type = type
         } else {
             throw SpecParsingError.unknownTargetType(typeString)
         }
-        
+
         if let supportedDestinations: [SupportedDestination] = jsonDictionary.json(atKeyPath: "supportedDestinations") {
             self.supportedDestinations = supportedDestinations
         }
-        
-        let isResolved = jsonDictionary.json(atKeyPath: "isMultiPlatformTarget") ?? false
+
+        let isResolved = jsonDictionary["isMultiPlatformTarget"] as? Bool ?? false
         if isResolved, supportedDestinations != nil {
             throw SpecParsingError.invalidTargetPlatformAsArray
         }
-        
-        var platformString: String = jsonDictionary.json(atKeyPath: "platform") ?? ""
+
+        var platformString: String = jsonDictionary["platform"] as? String ?? ""
         // platform defaults to 'auto' if it is empty and we are using supported destinations
         if supportedDestinations != nil, platformString.isEmpty {
             platformString = Platform.auto.rawValue
@@ -298,63 +232,62 @@ extension Target: NamedJSONDictionaryConvertible {
         // we add 'iOS' in supported destinations if it contains only 'macCatalyst'
         if supportedDestinations?.contains(.macCatalyst) == true,
            supportedDestinations?.contains(.iOS) == false {
-            
             supportedDestinations?.append(.iOS)
         }
-        
+
         if let platform = Platform(rawValue: platformString) {
             self.platform = platform
         } else {
             throw SpecParsingError.unknownTargetPlatform(platformString)
         }
-        
-        if let string: String = jsonDictionary.json(atKeyPath: "deploymentTarget") {
+
+        if let string: String = jsonDictionary["deploymentTarget"] as? String {
             deploymentTarget = try Version.parse(string)
-        } else if let double: Double = jsonDictionary.json(atKeyPath: "deploymentTarget") {
+        } else if let double: Double = jsonDictionary["deploymentTarget"] as? Double {
             deploymentTarget = try Version.parse(String(double))
         } else {
             deploymentTarget = nil
         }
 
         settings = try BuildSettingsParser(jsonDictionary: jsonDictionary).parse()
-        configFiles = jsonDictionary.json(atKeyPath: "configFiles") ?? [:]
-        if let source: String = jsonDictionary.json(atKeyPath: "sources") {
+        configFiles = jsonDictionary["configFiles"] as? [String: String] ?? [:]
+        if let source: String = jsonDictionary["sources"] as? String {
             sources = [TargetSource(path: source)]
         } else if let array = jsonDictionary["sources"] as? [Any] {
             sources = try array.compactMap { source in
                 if let string = source as? String {
-                    return TargetSource(path: string)
+                    TargetSource(path: string)
                 } else if let dictionary = source as? [String: Any] {
-                    return try TargetSource(jsonDictionary: dictionary)
+                    try TargetSource(jsonDictionary: dictionary)
                 } else {
-                    return nil
+                    nil
                 }
             }
         } else {
             sources = []
         }
-        if jsonDictionary["dependencies"] == nil {
+        if jsonDictionary["dependencies"].isNone {
             dependencies = []
         } else {
-            let dependencies: [Dependency] = try jsonDictionary.json(atKeyPath: "dependencies", invalidItemBehaviour: .fail)
+            let dependencies: [Dependency] = try jsonDictionary.jsonStrict(atKeyPath: "dependencies", invalidItemBehaviour: .fail)
             self.dependencies = dependencies.filter { [platform] dependency -> Bool in
                 // If unspecified, all platforms are supported
                 guard let platforms = dependency.platforms else { return true }
                 return platforms.contains(platform)
             }
         }
-        
-        if jsonDictionary["buildToolPlugins"] == nil {
+
+        if jsonDictionary["buildToolPlugins"].isNone {
             buildToolPlugins = []
         } else {
-            self.buildToolPlugins = try jsonDictionary.json(atKeyPath: "buildToolPlugins", invalidItemBehaviour: .fail)
+            self.buildToolPlugins = try jsonDictionary.jsonStrict(atKeyPath: "buildToolPlugins", invalidItemBehaviour: .fail)
         }
-        
-        if jsonDictionary["info"] != nil {
-            info = try jsonDictionary.json(atKeyPath: "info") as Plist
+
+        if jsonDictionary["info"].isSome {
+            info = try jsonDictionary.jsonStrict(atKeyPath: "info") as Plist
         }
-        if jsonDictionary["entitlements"] != nil {
-            entitlements = try jsonDictionary.json(atKeyPath: "entitlements") as Plist
+        if jsonDictionary["entitlements"].isSome {
+            entitlements = try jsonDictionary.jsonStrict(atKeyPath: "entitlements") as Plist
         }
 
         transitivelyLinkDependencies = jsonDictionary.json(atKeyPath: "transitivelyLinkDependencies")
@@ -366,8 +299,7 @@ extension Target: NamedJSONDictionaryConvertible {
         postBuildScripts = jsonDictionary.json(atKeyPath: "postBuildScripts") ?? jsonDictionary.json(atKeyPath: "postbuildScripts") ?? []
         buildRules = jsonDictionary.json(atKeyPath: "buildRules") ?? []
         scheme = jsonDictionary.json(atKeyPath: "scheme")
-        legacy = jsonDictionary.json(atKeyPath: "legacy")
-        attributes = jsonDictionary.json(atKeyPath: "attributes") ?? [:]
+        attributes = try jsonDictionary.json(atKeyPath: "attributes")?.asProjectAttributes() ?? [:]
         onlyCopyFilesOnInstall = jsonDictionary.json(atKeyPath: "onlyCopyFilesOnInstall") ?? false
         putResourcesBeforeSourcesBuildPhase = jsonDictionary.json(atKeyPath: "putResourcesBeforeSourcesBuildPhase") ?? false
     }
@@ -378,7 +310,7 @@ extension Target: JSONEncodable {
         var dict: [String: Any?] = [
             "type": type.name,
             "platform": platform.rawValue,
-            "supportedDestinations": supportedDestinations?.map { $0.rawValue },
+            "supportedDestinations": supportedDestinations?.map(\.rawValue),
             "settings": settings.toJSONValue(),
             "configFiles": configFiles,
             "attributes": attributes,
@@ -396,7 +328,6 @@ extension Target: JSONEncodable {
             "directlyEmbedCarthageDependencies": directlyEmbedCarthageDependencies,
             "requiresObjCLinking": requiresObjCLinking,
             "scheme": scheme?.toJSONValue(),
-            "legacy": legacy?.toJSONValue(),
         ]
 
         if productName != name {

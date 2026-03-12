@@ -1,110 +1,91 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 import Yams
 
-public struct SpecFile {
-    /// For the root spec, this is the folder containing the SpecFile. For subSpecs this is the path
-    /// to the folder of the parent spec that is including this SpecFile.
-    public let basePath: Path
-    public let jsonDictionary: JSONDictionary
-    public let subSpecs: [SpecFile]
+/// project.yml or template.yml specification
+///
+/// - Important: Does 2 jobs.
+/// 1) ``init()`` means: read raw specs from file (without final ``jsonDictionary`` merge and path values resolution)
+/// 2) ``resolvedDictionary()`` means: merge ``jsonDictionary`` (apply included templates and resolve path values)
+struct SpecFile {
+    private let source: Source
 
-    /// The relative path to use when resolving paths in the json dictionary. Is an empty path when
-    /// included with relativePaths disabled.
-    private let relativePath: Path
-    
-    /// The path to the file relative to the basePath.
-    private let filePath: Path
+    var basePath: Path { source.basePath }
 
-    fileprivate struct Include {
-        let path: Path
-        let relativePaths: Bool
-        let enable: Bool
+    let jsonDictionary: JSONDictionary
+    let subSpecs: [SpecFile]
 
-        static let defaultRelativePaths = true
-        static let defaultEnable = true
-
-        init?(any: Any) {
-            if let string = any as? String {
-                path = Path(string)
-                relativePaths = Include.defaultRelativePaths
-                enable = Include.defaultEnable
-            } else if let dictionary = any as? JSONDictionary, let path = dictionary["path"] as? String {
-                self.path = Path(path)
-                relativePaths = Self.resolveBoolean(dictionary, key: "relativePaths") ?? Include.defaultRelativePaths
-                enable = Self.resolveBoolean(dictionary, key: "enable") ?? Include.defaultEnable
-            } else {
-                return nil
-            }
-        }
-
-        static func parse(json: Any?) -> [Include] {
-            if let array = json as? [Any] {
-                return array.compactMap(Include.init)
-            } else if let object = json, let include = Include(any: object) {
-                return [include]
-            } else {
-                return []
-            }
-        }
-
-        private static func resolveBoolean(_ dictionary: [String: Any], key: String) -> Bool? {
-            dictionary[key] as? Bool ?? (dictionary[key] as? NSString)?.boolValue
-        }
-    }
-    
-    /// Create a SpecFile for a Project
-    /// - Parameters:
-    ///   - path: The absolute path to the spec file
-    ///   - projectRoot: The root of the project to use as the base path. When nil, uses the parent
-    ///     of the path.
-    public init(path: Path, projectRoot: Path? = nil, variables: [String: String] = [:]) throws {
-        let basePath = projectRoot ?? path.parent()
-        let filePath = try path.relativePath(from: basePath)
-        var cachedSpecFiles: [Path: SpecFile] = [:]
-        
-        try self.init(filePath: filePath, basePath: basePath, cachedSpecFiles: &cachedSpecFiles, variables: variables)
-    }
-    
     /// Memberwise initializer for SpecFile
-    public init(filePath: Path, jsonDictionary: JSONDictionary, basePath: Path = "", relativePath: Path = "", subSpecs: [SpecFile] = []) {
-        self.basePath = basePath
-        self.relativePath = relativePath
+    init(
+        filePath: Path,
+        basePath: Path = "",
+        relativePath: Path = "",
+        jsonDictionary: JSONDictionary,
+        subSpecs: [SpecFile] = []
+    ) {
+        let source = Source(
+            filePath: filePath,
+            basePath: basePath,
+            relativePath: relativePath
+        )
+        self.init(source: source, jsonDictionary: jsonDictionary, subSpecs: subSpecs)
+    }
+
+    /// Memberwise initializer for SpecFile
+    init(source: Source, jsonDictionary: JSONDictionary, subSpecs: [SpecFile]) {
+        self.source = source
         self.jsonDictionary = jsonDictionary
         self.subSpecs = subSpecs
-        self.filePath = filePath
+    }
+}
+
+// MARK: - Read file
+
+extension SpecFile {
+    /// Load a SpecFile for a Project
+    /// - Parameters:
+    ///   - path: The absolute path to the spec file
+    init(path: Path) throws {
+        var cache = [Path: SpecFile]()
+
+        self = try Self.loadProjectSpec(
+            source: try Source.project(path),
+            cachedSpecFiles: &cache
+        )
     }
 
-    private init(include: Include, basePath: Path, relativePath: Path, cachedSpecFiles: inout [Path: SpecFile], variables: [String: String]) throws {
-        let basePath = include.relativePaths ? (basePath + relativePath) : basePath
-        let relativePath = include.relativePaths ? include.path.parent() : Path()
-
-        try self.init(filePath: include.path, basePath: basePath, cachedSpecFiles: &cachedSpecFiles, variables: variables, relativePath: relativePath)
-    }
-
-    private init(filePath: Path, basePath: Path, cachedSpecFiles: inout [Path: SpecFile], variables: [String: String], relativePath: Path = "") throws {
-        let path = basePath + filePath
-        if let specFile = cachedSpecFiles[path] {
-            self = specFile
-            return
+    private static func loadProjectSpec(
+        source: Source,
+        cachedSpecFiles: inout [Path: SpecFile]
+    ) throws -> SpecFile {
+        let fullFilePath = source.filePath
+        if let specFile = cachedSpecFiles[fullFilePath] {
+            return specFile
         }
 
-        let jsonDictionary = try SpecFile.loadDictionary(path: path).expand(variables: variables)
+        let jsonDictionary = try Self.loadDictionary(fullFilePath)
 
-        let includes = Include.parse(json: jsonDictionary["include"])
-        let subSpecs: [SpecFile] = try includes
+        let subSpecs: [SpecFile] = try Include.parseFromSpec(jsonDictionary)
             .filter(\.enable)
             .map { include in
-                return try SpecFile(include: include, basePath: basePath, relativePath: relativePath, cachedSpecFiles: &cachedSpecFiles, variables: variables)
+                try Self.loadProjectSpec(
+                    source: source.include(include),
+                    cachedSpecFiles: &cachedSpecFiles
+                )
             }
 
-        self.init(filePath: filePath, jsonDictionary: jsonDictionary, basePath: basePath, relativePath: relativePath, subSpecs: subSpecs)
-        cachedSpecFiles[path] = self
+        let specFile = SpecFile(
+            source: source,
+            jsonDictionary: jsonDictionary,
+            subSpecs: subSpecs
+        )
+        cachedSpecFiles[fullFilePath] = specFile
+
+        return specFile
     }
 
-    static func loadDictionary(path: Path) throws -> JSONDictionary {
-        // Depending on the extension we will either load the file as YAML or JSON
+    private static func loadDictionary(_ path: Path) throws -> JSONDictionary {
         if path.extension?.lowercased() == "json" {
             let data: Data = try path.read()
             let jsonData = try JSONSerialization.jsonObject(with: data, options: .allowFragments)
@@ -116,146 +97,197 @@ public struct SpecFile {
             return try loadYamlDictionary(path: path)
         }
     }
+}
 
-    public func resolvedDictionary() -> JSONDictionary {
-        resolvedDictionaryWithUniqueTargets()
-    }
+// MARK: - resolve JSON
 
-    private func resolvedDictionaryWithUniqueTargets() -> JSONDictionary {
-        var cachedSpecFiles: [Path: SpecFile] = [:]
-        let resolvedSpec = resolvingPaths(cachedSpecFiles: &cachedSpecFiles)
+extension SpecFile {
+    /// Resolve pathProperties in all included specs than merge JSON
+    func resolvedDictionary() -> JSONDictionary {
+        var current: [SpecFile] = [self]
+        var next: [SpecFile] = []
+        var queue: [(json: JSONDictionary, filePath: Path)] = []
+        var resolvedJsons: [Path: JSONDictionary] = [:]
 
-        var mergedSpecPaths = Set<Path>()
-        return resolvedSpec.mergedDictionary(set: &mergedSpecPaths)
-    }
+        while !current.isEmpty {
+            for spec in current {
+                let fullPath = spec.source.filePath
 
-    private func mergedDictionary(set mergedSpecPaths: inout Set<Path>) -> JSONDictionary {
-        let path = basePath + filePath
+                let json: JSONDictionary
 
-        guard mergedSpecPaths.insert(path).inserted else { return [:] }
+                if spec.source.relativePath == "" {
+                    json = spec.jsonDictionary
+                } else if let cached = resolvedJsons[fullPath] {
+                    json = cached
+                } else {
+                    json = Project.pathProperties.resolvingPaths(in: spec.jsonDictionary, relativeTo: spec.source.relativePath)
+                    resolvedJsons[fullPath] = json
+                }
+                queue.append((json, fullPath))
 
-        return jsonDictionary.merged(onto:
-            subSpecs
-                .map { $0.mergedDictionary(set: &mergedSpecPaths) }
-                .reduce([:]) { $1.merged(onto: $0) })
-    }
-
-    private func resolvingPaths(cachedSpecFiles: inout [Path: SpecFile], relativeTo basePath: Path = Path()) -> SpecFile {
-        let path = basePath + filePath
-        if let cachedSpecFile = cachedSpecFiles[path] {
-            return cachedSpecFile
+                for subSpec in spec.subSpecs {
+                    next.append(subSpec)
+                }
+            }
+            current = next
+            next.removeAll()
         }
 
-        let relativePath = (basePath + self.relativePath).normalize()
-        guard relativePath != Path() else {
-            return self
-        }
+        var seen = Set<Path>()
 
-        let jsonDictionary = Project.pathProperties.resolvingPaths(in: self.jsonDictionary, relativeTo: relativePath)
-        let specFile = SpecFile(
-            filePath: filePath,
-            jsonDictionary: jsonDictionary,
-            basePath: self.basePath,
-            relativePath: self.relativePath,
-            subSpecs: subSpecs.map { $0.resolvingPaths(cachedSpecFiles: &cachedSpecFiles, relativeTo: relativePath) }
-        )
-        cachedSpecFiles[path] = specFile
-        return specFile
+        // Spec should override subSpecs, that why we using reversed order:
+        // [:] <- include <- .. <- include <- project
+        return queue.reversed().reduce(into: [:]) {
+            guard seen.insert($1.filePath).inserted else { return }
+
+            $1.json.mergedSpecInplaceOverwriting(&$0)
+        }
     }
 }
 
-extension Dictionary where Key == String, Value: Any {
+// MARK: - Include
 
-    func merged(onto other: [Key: Value]) -> [Key: Value] {
-        var merged = other
+extension SpecFile {
+    /// "include:" or "import:" spec section parser
+    struct Include: Equatable {
+        let path: Path
+        /// Deprecated XcodeGen legacy
+        let relativePaths: Bool
+        let enable: Bool
 
-        for (key, value) in self {
-            if key.hasSuffix(":REPLACE") {
-                let newKey = key[key.startIndex..<key.index(key.endIndex, offsetBy: -8)]
-                merged[Key(newKey)] = value
-            } else if let dictionary = value as? [Key: Value], let base = merged[key] as? [Key: Value] {
-                merged[key] = dictionary.merged(onto: base) as? Value
-            } else if let array = value as? [Any], let base = merged[key] as? [Any] {
-                merged[key] = (base + array) as? Value
+        /// Memberwise initializer
+        init(path: Path, relativePaths: Bool, enable: Bool = true) {
+            self.path = path
+            self.relativePaths = relativePaths
+            self.enable = enable
+        }
+
+        /// Parser init
+        init?(
+            any: Any,
+            relativePathsDefault: Bool
+        ) {
+            if let string = any as? String {
+                path = Path(string)
+                relativePaths = relativePathsDefault
+                enable = true
+            } else if let dictionary = any as? JSONDictionary, let path = dictionary["path"] as? String {
+                self.path = Path(path)
+                relativePaths = Self.resolveBoolean(dictionary, key: "relativePaths") ?? relativePathsDefault
+                enable = Self.resolveBoolean(dictionary, key: "enable") ?? true
             } else {
-                merged[key] = value
-            }
-        }
-        return merged
-    }
-
-    func expand(variables: [String: String]) -> JSONDictionary {
-        var expanded: JSONDictionary = self
-
-        if !variables.isEmpty {
-            for (key, value) in self {
-                let newKey = expand(variables: variables, in: key)
-                if newKey != key {
-                    expanded.removeValue(forKey: key)
-                }
-                expanded[newKey] = expand(variables: variables, in: value)
+                return nil
             }
         }
 
-        return expanded
-    }
-
-    private func expand(variables: [String: String], in value: Any) -> Any {
-        switch value {
-        case let dictionary as JSONDictionary:
-            return dictionary.expand(variables: variables)
-        case let string as String:
-            return expand(variables: variables, in: string)
-        case let array as [JSONDictionary]:
-            return array.map { $0.expand(variables: variables) }
-        case let array as [String]:
-            return array.map { self.expand(variables: variables, in: $0) }
-        case let anyArray as [Any]:
-            return anyArray.map { self.expand(variables: variables, in: $0) }
-        default:
-            return value
-        }
-    }
-
-    private func expand(variables: [String: String], in string: String) -> String {
-        var result = string
-        var index = result.startIndex
-
-        while index < result.endIndex {
-            let substring = result[index...]
-
-            if substring.count < 4 {
-                // We need at least 4 characters: ${x}
-                index = result.endIndex
-            } else if substring[index] == "$"
-                && substring[substring.index(index, offsetBy: 1)] == "{"
-                && substring[substring.index(index, offsetBy: 2)] != "}" {
-                // This is the start of a variable expansion...
-                let variableStart = index
-                if let variableEnd = substring.firstIndex(of: "}") {
-                    // ...with an end
-                    let nameStart = result.index(variableStart, offsetBy: 2) // Skipping ${
-                    let nameEnd = result.index(variableEnd, offsetBy: -1) // Removing trailing }
-
-                    let name = result[nameStart...nameEnd]
-
-                    if let value = variables[String(name)] {
-                        result.replaceSubrange(variableStart...variableEnd, with: value)
-                        index = result.index(index, offsetBy: value.count)
-                    } else {
-                        // Skip this whole variable for which we don't have a value
-                        index = result.index(after: variableEnd)
-                    }
-                } else {
-                    // Malformed variable, skip the whole string
-                    index = result.endIndex
-                }
+        static func parseFromSpec(_ specJson: JSONDictionary) -> [Include] {
+            let imports = parseImports(specJson)
+            if imports.isEmpty {
+                return parseIncludes(specJson)
             } else {
-                // Move on to the next $ and start again or finish early
-                index = result[result.index(after: index)...].firstIndex(of: "$") ?? result.endIndex
+                return imports
             }
         }
 
-        return result
+        private static func parseImports(_ specJson: JSONDictionary) -> [Include] {
+            let json: Any? = specJson["import"]
+
+            if let array = json as? [Any] {
+                return array.compactMap { Include(any: $0, relativePathsDefault: false) }
+            } else if let object = json, let include = Include(any: object, relativePathsDefault: false) {
+                return [include]
+            } else {
+                return []
+            }
+        }
+
+        /// Legacy
+        private static func parseIncludes(_ specJson: JSONDictionary) -> [Include] {
+            let json: Any? = specJson["include"]
+
+            if let array = json as? [Any] {
+                return array.compactMap { Include(any: $0, relativePathsDefault: true) }
+            } else if let object = json, let include = Include(any: object, relativePathsDefault: true) {
+                return [include]
+            } else {
+                return []
+            }
+        }
+
+        private static func resolveBoolean(_ dictionary: [String: Any], key: String) -> Bool? {
+            dictionary[key] as? Bool ?? (dictionary[key] as? NSString)?.boolValue
+        }
+    }
+}
+
+// MARK: - Source
+
+extension SpecFile {
+    /// ``Path`` to ``SpecFile`` and related dirs
+    struct Source: Equatable {
+        /// ``SpecFile`` absolute path.
+        ///
+        /// Example:
+        /// ```
+        /// /Users/18397633/Development/assistant-sdk-ios/Submodules/SDSoup/project.yml
+        /// ```
+        let filePath: Path
+
+        /// For the root spec, this is the folder containing the ``SpecFile``.
+        /// For subSpecs this is the path to the folder of the parent spec that is including this ``SpecFile``.
+        ///
+        /// Example:
+        /// ```
+        /// /Users/18397633/Development/assistant-sdk-ios/Submodules/SDSoup
+        /// ```
+        let basePath: Path
+
+        /// ``PathProperty`` resolution anchor path.
+        ///
+        /// The relative path to use when resolving paths in the json dictionary.
+        /// It is "" path when included with relativePaths disabled.
+        ///
+        /// Example:
+        /// ```
+        /// ../../templates/xcodegen
+        /// ```
+        let relativePath: Path
+
+        /// ``SpecFile`` parent directory.
+        var parentPath: Path { filePath.parent() }
+
+        /// Memberwise initializer
+        init(filePath: Path, basePath: Path, relativePath: Path) {
+            self.filePath = filePath
+            self.basePath = basePath
+            self.relativePath = relativePath
+        }
+
+        /// Pathes for loading a project.yml ``SpecFile``
+        static func project(_ path: Path) throws -> Source {
+            Source(
+                filePath: path,
+                basePath: path.parent(),
+                relativePath: ""
+            )
+        }
+
+        /// Pathes for import in ``SpecFile`` (mergable "template")
+        func include(_ include: Include) -> Source {
+            if include.relativePaths {
+                let includePath = parentPath + include.path
+                return Source(
+                    filePath: includePath,
+                    basePath: basePath,
+                    relativePath: (try? includePath.parent().relativePath(from: basePath))?.normalize() ?? ""
+                )
+            } else {
+                return Source(
+                    filePath: parentPath + include.path,
+                    basePath: basePath,
+                    relativePath: ""
+                )
+            }
+        }
     }
 }

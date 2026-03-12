@@ -1,28 +1,36 @@
 import Foundation
+import ToolsCore
 
-public extension Array {
+extension Array {
+    public func parallelMap<T>(transform: @Sendable (Element) -> T) -> [T] {
+        var result = ContiguousArray<T?>(repeating: nil, count: count)
+        return result.withUnsafeMutableBufferPointer { buffer in
+            let selfBox = UncheckedSendable(self)
+            let bufferBox = UncheckedSendable(buffer)
+            DispatchQueue.concurrentPerform(iterations: buffer.count) { idx in
+                bufferBox.subject[idx] = transform(selfBox.subject[idx])
+            }
+            return buffer.map { $0! }
+        }
+    }
+}
 
-   func parallelMap<T>(transform: (Element) -> T) -> [T] {
-       var result = ContiguousArray<T?>(repeating: nil, count: count)
-       return result.withUnsafeMutableBufferPointer { buffer in
-           DispatchQueue.concurrentPerform(iterations: buffer.count) { idx in
-               buffer[idx] = transform(self[idx])
-           }
-           return buffer.map { $0! }
-       }
-   }
+extension Array where Element == [String: Any?] {
+    public func removingEmptyArraysDictionariesAndNils() -> [[String: Any]] {
+        map { $0.removingEmptyArraysDictionariesAndNils() }
+    }
 }
 
 /// Holds a sorted array, created from specified sequence
 /// This structure is needed for the cases, when some part of application requires array to be sorted, but don't trust any inputs :)
 public struct SortedArray<T: Comparable> {
-    public let value: Array<T>
+    public let value: [T]
     public init<S: Sequence>(_ value: S) where S.Element == T {
         self.value = value.sorted()
     }
 }
 
-public extension SortedArray {
+extension SortedArray {
     /// Returns the first index in which an element of the collection satisfies the given predicate.
     /// The collection assumed to be sorted. If collection is not have sorted values the result is undefined.
     ///
@@ -45,7 +53,7 @@ public extension SortedArray {
     ///
     /// - Complexity: O(log(*n*)), where *n* is the length of the collection.
     @inlinable
-    func firstIndex(where predicate: (T) throws -> Bool) rethrows -> Int? {
+    public func firstIndex(where predicate: (T) throws -> Bool) rethrows -> Int? {
         // Predicate should divide a collection to two pairs of values
         // "bad" values for which predicate returns `false``
         // "good" values for which predicate return `true`

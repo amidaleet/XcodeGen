@@ -1,19 +1,18 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 import ProjectSpec
+import ToolsCore
 import XcodeProj
 import Yams
 
 extension Project {
-
     public func getProjectBuildSettings(config: Config) -> BuildSettings {
         var buildSettings: BuildSettings = [:]
 
         // set project SDKROOT is a single platform
         if let firstPlatform = targets.first?.platform,
-           targets.allSatisfy({ $0.platform == firstPlatform })
-        {
+           targets.allSatisfy({ $0.platform == firstPlatform }) {
             buildSettings["SDKROOT"] = .string(firstPlatform.sdkRoot)
         }
 
@@ -41,39 +40,38 @@ extension Project {
 
     public func getTargetBuildSettings(target: Target, config: Config) -> BuildSettings {
         var buildSettings = BuildSettings()
-        
+
         // list of supported destination sorted by priority
         let specSupportedDestinations = target.supportedDestinations?.sorted(by: { $0.priority < $1.priority }) ?? []
-        
+
         if options.settingPresets.applyTarget {
             let platform: Platform
-            
+
             if target.platform == .auto,
                let firstDestination = specSupportedDestinations.first,
                let firstDestinationPlatform = Platform(rawValue: firstDestination.rawValue) {
-                
                 platform = firstDestinationPlatform
             } else {
                 platform = target.platform
             }
-            
+
             buildSettings += SettingsPresetFile.platform(platform).getBuildSettings()
             buildSettings += SettingsPresetFile.product(target.type).getBuildSettings()
             buildSettings += SettingsPresetFile.productPlatform(target.type, platform).getBuildSettings()
-            
+
             if target.platform == .auto {
                 // this fix is necessary because the platform preset overrides the original value
                 buildSettings["SDKROOT"] = .string(Platform.auto.rawValue)
             }
-            
+
             if !specSupportedDestinations.isEmpty {
                 var supportedPlatforms: [String] = []
                 var targetedDeviceFamily: [String] = []
-                
+
                 for supportedDestination in specSupportedDestinations {
                     let supportedPlatformBuildSettings = SettingsPresetFile.supportedDestination(supportedDestination).getBuildSettings()
                     buildSettings += supportedPlatformBuildSettings
-                    
+
                     if let value = supportedPlatformBuildSettings?["SUPPORTED_PLATFORMS"]?.stringValue {
                         supportedPlatforms += value.components(separatedBy: " ")
                     }
@@ -81,12 +79,12 @@ extension Project {
                         targetedDeviceFamily += value.components(separatedBy: ",")
                     }
                 }
-                
+
                 buildSettings["SUPPORTED_PLATFORMS"] = .string(supportedPlatforms.joined(separator: " "))
                 buildSettings["TARGETED_DEVICE_FAMILY"] = .string(targetedDeviceFamily.joined(separator: ","))
             }
         }
-        
+
         // apply custom platform version
         if let version = target.deploymentTarget {
             if !specSupportedDestinations.isEmpty {
@@ -142,25 +140,25 @@ extension Project {
     // combines all levels of a target's settings: target, target config, project, project config
     public func getCombinedBuildSetting(_ setting: String, target: ProjectTarget, config: Config) -> BuildSetting? {
         if let target = target as? Target,
-            let value = getTargetBuildSettings(target: target, config: config)[setting] {
+           let value = getTargetBuildSettings(target: target, config: config)[setting] {
             return value
         }
         if let configFilePath = target.configFiles[config.name],
-            let value = loadConfigFileBuildSettings(path: configFilePath)?[setting] {
+           let value = loadConfigFileBuildSettings(path: configFilePath)?[setting] {
             return value
         }
         if let value = getProjectBuildSettings(config: config)[setting] {
             return value
         }
         if let configFilePath = configFiles[config.name],
-            let value = loadConfigFileBuildSettings(path: configFilePath)?[setting] {
+           let value = loadConfigFileBuildSettings(path: configFilePath)?[setting] {
             return value
         }
         return nil
     }
 
     public func getBoolBuildSetting(_ setting: String, target: ProjectTarget, config: Config) -> Bool? {
-        getCombinedBuildSetting(setting, target: target, config: config)?.boolValue
+        getCombinedBuildSetting(setting, target: target, config: config)?.fullBoolValue
     }
 
     public func targetHasBuildSetting(_ setting: String, target: Target, config: Config) -> Bool {
@@ -185,94 +183,104 @@ extension Project {
     /// Returns cached build settings from a config file
     private func loadConfigFileBuildSettings(path: String) -> BuildSettings? {
         let configFilePath = basePath + path
-        if let cached = configFileSettings[configFilePath.string] {
-            return cached.value
-        } else {
-            guard let configFile = try? XCConfig(path: configFilePath) else {
-                configFileSettings[configFilePath.string] = .nothing
-                return nil
+        return UnsafeCache.shared.configFileSettings.withLock { cache in
+            if let cached = cache[configFilePath.string] {
+                return cached.value
+            } else {
+                guard let configFile = try? XCConfig(path: configFilePath) else {
+                    cache[configFilePath.string] = .nothing
+                    return nil
+                }
+                let settings = configFile.flattenedBuildSettings()
+                cache[configFilePath.string] = .cached(settings)
+                return settings
             }
-            let settings = configFile.flattenedBuildSettings()
-            configFileSettings[configFilePath.string] = .cached(settings)
-            return settings
         }
     }
 }
 
-private enum Cached<T> {
-    case cached(T)
+private enum CachedBuildSettings {
+    case cached(BuildSettings)
     case nothing
 
-    var value: T? {
+    var value: BuildSettings? {
         switch self {
-        case let .cached(value): return value
-        case .nothing: return nil
+        case let .cached(value): value
+        case .nothing: nil
         }
     }
 }
 
-// cached flattened xcconfig file settings
-private var configFileSettings: [String: Cached<BuildSettings>] = [:]
+private final class UnsafeCache: @unchecked Sendable {
+    static let shared = UnsafeCache()
 
-// cached setting preset settings
-private var settingPresetSettings: [String: Cached<BuildSettings>] = [:]
+    /// cached flattened xcconfig file settings
+    let configFileSettings: Atomic<[String: CachedBuildSettings]> = Atomic([:])
+
+    /// cached setting preset settings
+    let settingPresetSettings: Atomic<[String: CachedBuildSettings]> = Atomic([:])
+}
 
 extension SettingsPresetFile {
-
     public func getBuildSettings() -> BuildSettings? {
-        if let cached = settingPresetSettings[path] {
-            return cached.value
-        }
-        let bundlePath = Path(Bundle.main.bundlePath)
-        let relativePath = Path("SettingPresets/\(path).yml")
-        var possibleSettingsPaths: [Path] = [
-            relativePath,
-            bundlePath + relativePath,
-            bundlePath + "../share/xcodegen/\(relativePath)",
-            Path(#file).parent().parent().parent() + relativePath,
-        ]
-
-        if let resourcePath = Bundle.main.resourcePath {
-            possibleSettingsPaths.append(Path(resourcePath) + relativePath)
-        }
-
-        if let symlink = try? (bundlePath + "xcodegen").symlinkDestination() {
-            possibleSettingsPaths = [
-                symlink.parent() + relativePath,
-            ] + possibleSettingsPaths
-        }
-        if let moduleResourcePath = Bundle.availableModule?.path(forResource: "SettingPresets", ofType: nil) {
-            possibleSettingsPaths.append(Path(moduleResourcePath) + "\(path).yml")
-        }
-
-        guard let settingsPath = possibleSettingsPaths.first(where: { $0.exists }) else {
-            switch self {
-            case .base, .config, .platform, .supportedDestination:
-                print("No \"\(name)\" settings found")
-            case .product, .productPlatform:
-                break
+        UnsafeCache.shared.settingPresetSettings.withLock { cache in
+            if let cached = cache[path] {
+                return cached.value
             }
-            settingPresetSettings[path] = .nothing
-            return nil
-        }
+            let bundlePath = Path(Bundle.main.bundlePath)
+            let relativePath = Path("SettingPresets/\(path).yml")
+            var possibleSettingsPaths: [Path] = [
+                relativePath,
+                bundlePath + relativePath,
+                bundlePath + "../share/xcodegen/\(relativePath)",
+                Path(#filePath).parent().parent().parent() + relativePath,
+            ]
 
-        guard let dictionary = try? loadYamlDictionary(path: settingsPath) else {
-            print("Error parsing \"\(name)\" settings")
-            return nil
+            if let resourcePath = Bundle.main.resourcePath {
+                possibleSettingsPaths.append(Path(resourcePath) + relativePath)
+            }
+
+            if let symlink = try? (bundlePath + "xcodegen").symlinkDestination() {
+                possibleSettingsPaths = [
+                    symlink.parent() + relativePath,
+                ] + possibleSettingsPaths
+            }
+            if let moduleResourcePath = Bundle.availableModule?.path(forResource: "SettingPresets", ofType: nil) {
+                possibleSettingsPaths.append(Path(moduleResourcePath) + "\(path).yml")
+            }
+
+            guard let settingsPath = possibleSettingsPaths.first(where: { $0.exists }) else {
+                switch self {
+                case .base,
+                     .config,
+                     .platform,
+                     .supportedDestination:
+                    print("No \"\(name)\" settings found")
+                case .product,
+                     .productPlatform:
+                    break
+                }
+                cache[path] = .nothing
+                return nil
+            }
+
+            guard let buildSettings = try? loadYamlDictionary(path: settingsPath).asBuildSettings() else {
+                print("Error parsing \"\(name)\" settings")
+                return nil
+            }
+            cache[path] = .cached(buildSettings)
+            return buildSettings
         }
-        let buildSettings: BuildSettings = dictionary.mapValues { BuildSetting(any: $0) }
-        settingPresetSettings[path] = .cached(buildSettings)
-        return buildSettings
     }
 }
 
-private class BundleFinder {}
+private final class BundleFinder {}
 
 /// The default SPM generated `Bundle.module` crashes on runtime if there is no .bundle file.
 /// Below implementation modified from generated `Bundle.module` code which call `fatalError` if .bundle file not found.
-private extension Bundle {
+extension Bundle {
     /// Returns the resource bundle associated with the current Swift module.
-    static let availableModule: Bundle? = {
+    fileprivate static let availableModule: Bundle? = {
         let bundleName = "XcodeGen_XcodeGenKit"
 
         let overrides: [URL]
@@ -281,7 +289,7 @@ private extension Bundle {
         // check for 'PACKAGE_RESOURCE_BUNDLE_URL' will be removed when all clients have switched over.
         // This removal is tracked by rdar://107766372.
         if let override = ProcessInfo.processInfo.environment["PACKAGE_RESOURCE_BUNDLE_PATH"]
-                       ?? ProcessInfo.processInfo.environment["PACKAGE_RESOURCE_BUNDLE_URL"] {
+            ?? ProcessInfo.processInfo.environment["PACKAGE_RESOURCE_BUNDLE_URL"] {
             overrides = [URL(fileURLWithPath: override)]
         } else {
             overrides = []

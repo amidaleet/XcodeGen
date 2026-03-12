@@ -1,5 +1,5 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
 public struct BuildScript: Equatable {
     public static let runOnlyWhenInstallingDefault = false
@@ -51,7 +51,6 @@ public struct BuildScript: Equatable {
 }
 
 extension BuildScript: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         name = jsonDictionary.json(atKeyPath: "name")
         inputFiles = jsonDictionary.json(atKeyPath: "inputFiles") ?? []
@@ -62,7 +61,7 @@ extension BuildScript: JSONObjectConvertible {
         if let string: String = jsonDictionary.json(atKeyPath: "script") {
             script = .script(string)
         } else {
-            let path: String = try jsonDictionary.json(atKeyPath: "path")
+            let path: String = try jsonDictionary.jsonStrict(atKeyPath: "path")
             script = .path(path)
         }
         shell = jsonDictionary.json(atKeyPath: "shell")
@@ -94,9 +93,9 @@ extension BuildScript: JSONEncodable {
         }
 
         switch script {
-        case .path(let string):
+        case let .path(string):
             dict["path"] = string
-        case .script(let string):
+        case let .script(string):
             dict["script"] = string
         }
 
@@ -109,7 +108,6 @@ extension BuildScript: JSONEncodable {
 }
 
 extension BuildScript: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("path"),

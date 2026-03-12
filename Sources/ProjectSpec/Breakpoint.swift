@@ -1,16 +1,13 @@
 import Foundation
+import JSONutils
 import XcodeProj
-import JSONUtilities
 
 public typealias BreakpointActionExtensionID = XCBreakpointList.BreakpointProxy.BreakpointContent.BreakpointActionProxy.ActionExtensionID
 public typealias BreakpointExtensionID = XCBreakpointList.BreakpointProxy.BreakpointExtensionID
 
 public struct Breakpoint: Equatable {
-
     public enum BreakpointType: Equatable {
-
         public struct Exception: Equatable {
-
             public enum Scope: String, Equatable {
                 case all = "0"
                 case objectiveC = "1"
@@ -25,12 +22,15 @@ public struct Breakpoint: Equatable {
             public var scope: Scope
             public var stopOnStyle: StopOnStyle
 
-            public init(scope: Breakpoint.BreakpointType.Exception.Scope = .objectiveC,
-                        stopOnStyle: Breakpoint.BreakpointType.Exception.StopOnStyle = .throw) {
+            public init(
+                scope: Breakpoint.BreakpointType.Exception.Scope = .objectiveC,
+                stopOnStyle: Breakpoint.BreakpointType.Exception.StopOnStyle = .throw
+            ) {
                 self.scope = scope
                 self.stopOnStyle = stopOnStyle
             }
         }
+
         case file(path: String, line: Int, column: Int?)
         case exception(Exception)
         case swiftError
@@ -42,9 +42,7 @@ public struct Breakpoint: Equatable {
     }
 
     public enum Action: Equatable {
-
         public struct Log: Equatable {
-
             public enum ConveyanceType: String, Equatable {
                 case console = "0"
                 case speak = "1"
@@ -91,14 +89,16 @@ public struct Breakpoint: Equatable {
     public var condition: String?
     public var actions: [Breakpoint.Action]
 
-    public init(type: BreakpointType,
-                enabled: Bool = true,
-                ignoreCount: Int = 0,
-                continueAfterRunningActions: Bool = false,
-                filePath: String? = nil,
-                line: Int? = nil,
-                condition: String? = nil,
-                actions: [Breakpoint.Action] = []) {
+    public init(
+        type: BreakpointType,
+        enabled: Bool = true,
+        ignoreCount: Int = 0,
+        continueAfterRunningActions: Bool = false,
+        filePath _: String? = nil,
+        line _: Int? = nil,
+        condition: String? = nil,
+        actions: [Breakpoint.Action] = []
+    ) {
         self.type = type
         self.enabled = enabled
         self.ignoreCount = ignoreCount
@@ -109,7 +109,6 @@ public struct Breakpoint: Equatable {
 }
 
 extension Breakpoint.BreakpointType.Exception.Scope {
-
     public init(string: String) throws {
         let string = string.lowercased()
         switch string {
@@ -126,7 +125,6 @@ extension Breakpoint.BreakpointType.Exception.Scope {
 }
 
 extension Breakpoint.BreakpointType.Exception.StopOnStyle {
-
     public init(string: String) throws {
         let string = string.lowercased()
         switch string {
@@ -141,7 +139,6 @@ extension Breakpoint.BreakpointType.Exception.StopOnStyle {
 }
 
 extension Breakpoint.Action.Log.ConveyanceType {
-
     init(string: String) throws {
         let string = string.lowercased()
         switch string {
@@ -156,9 +153,8 @@ extension Breakpoint.Action.Log.ConveyanceType {
 }
 
 extension Breakpoint.Action.Sound {
-
     init(name: String) throws {
-        guard let sound = Self.init(rawValue: name) else {
+        guard let sound = Self(rawValue: name) else {
             throw SpecParsingError.unknownBreakpointActionSoundName(name)
         }
         self = sound
@@ -166,9 +162,8 @@ extension Breakpoint.Action.Sound {
 }
 
 extension Breakpoint.Action: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        let idString: String = try jsonDictionary.json(atKeyPath: "type")
+        let idString: String = try jsonDictionary.jsonStrict(atKeyPath: "type")
         let id = try BreakpointActionExtensionID(string: idString)
         switch id {
         case .debuggerCommand:
@@ -178,7 +173,7 @@ extension Breakpoint.Action: JSONObjectConvertible {
             let message: String? = jsonDictionary.json(atKeyPath: "message")
             let conveyanceType: Log.ConveyanceType
             if jsonDictionary["conveyanceType"] != nil {
-                let conveyanceTypeString: String = try jsonDictionary.json(atKeyPath: "conveyanceType")
+                let conveyanceTypeString: String = try jsonDictionary.jsonStrict(atKeyPath: "conveyanceType")
                 conveyanceType = try .init(string: conveyanceTypeString)
             } else {
                 conveyanceType = .console
@@ -197,7 +192,7 @@ extension Breakpoint.Action: JSONObjectConvertible {
         case .sound:
             let sound: Sound
             if jsonDictionary["sound"] != nil {
-                let name: String = try jsonDictionary.json(atKeyPath: "sound")
+                let name: String = try jsonDictionary.jsonStrict(atKeyPath: "sound")
                 sound = try .init(name: name)
             } else {
                 sound = .basso
@@ -210,27 +205,26 @@ extension Breakpoint.Action: JSONObjectConvertible {
 }
 
 extension Breakpoint: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        let idString: String = try jsonDictionary.json(atKeyPath: "type")
+        let idString: String = try jsonDictionary.jsonStrict(atKeyPath: "type")
         let id = try BreakpointExtensionID(string: idString)
         switch id {
         case .file:
-            let path: String = try jsonDictionary.json(atKeyPath: "path")
-            let line: Int = try jsonDictionary.json(atKeyPath: "line")
+            let path: String = try jsonDictionary.jsonStrict(atKeyPath: "path")
+            let line: Int = try jsonDictionary.jsonStrict(atKeyPath: "line")
             let column: Int? = jsonDictionary.json(atKeyPath: "column")
             type = .file(path: path, line: line, column: column)
         case .exception:
             let scope: BreakpointType.Exception.Scope
             if jsonDictionary["scope"] != nil {
-                let scopeString: String = try jsonDictionary.json(atKeyPath: "scope")
+                let scopeString: String = try jsonDictionary.jsonStrict(atKeyPath: "scope")
                 scope = try .init(string: scopeString)
             } else {
                 scope = .objectiveC
             }
             let stopOnStyle: BreakpointType.Exception.StopOnStyle
             if jsonDictionary["stopOnStyle"] != nil {
-                let stopOnStyleString: String = try jsonDictionary.json(atKeyPath: "stopOnStyle")
+                let stopOnStyleString: String = try jsonDictionary.jsonStrict(atKeyPath: "stopOnStyle")
                 stopOnStyle = try .init(string: stopOnStyleString)
             } else {
                 stopOnStyle = .throw
@@ -256,7 +250,7 @@ extension Breakpoint: JSONObjectConvertible {
         continueAfterRunningActions = jsonDictionary.json(atKeyPath: "continueAfterRunningActions") ?? false
         condition = jsonDictionary.json(atKeyPath: "condition")
         if jsonDictionary["actions"] != nil {
-            actions = try jsonDictionary.json(atKeyPath: "actions", invalidItemBehaviour: .fail)
+            actions = try jsonDictionary.jsonStrict(atKeyPath: "actions", invalidItemBehaviour: .fail)
         } else {
             actions = []
         }

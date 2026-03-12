@@ -1,7 +1,7 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
-public struct ProjectReference: Hashable {
+public struct ProjectReference: Hashable, Sendable {
     public var name: String
     public var path: String
 
@@ -12,7 +12,7 @@ public struct ProjectReference: Hashable {
 }
 
 extension ProjectReference: PathContainer {
-
+    /// Only dict version path properties
     static var pathProperties: [PathProperty] {
         [
             .dictionary([
@@ -22,10 +22,20 @@ extension ProjectReference: PathContainer {
     }
 }
 
-extension ProjectReference: NamedJSONDictionaryConvertible {
+extension ProjectReference: NamedJSONConvertible {
+    public init(name: String, json: Any) throws {
+        if let jsonDictionary = json as? JSONDictionary {
+            try self.init(name: name, jsonDictionary: jsonDictionary)
+        } else if let pathString = json as? String {
+            self = ProjectReference(name: name, path: pathString)
+        } else {
+            throw JSONUtilsError.fileDeserializationFailed
+        }
+    }
+
     public init(name: String, jsonDictionary: JSONDictionary) throws {
         self.name = name
-        self.path = try jsonDictionary.json(atKeyPath: "path")
+        self.path = try jsonDictionary.jsonStrict(atKeyPath: "path")
     }
 }
 

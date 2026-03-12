@@ -1,8 +1,7 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
 public struct Plist: Equatable {
-
     public let path: String
     public let properties: [String: Any]
 
@@ -18,9 +17,8 @@ public struct Plist: Equatable {
 }
 
 extension Plist: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        path = try jsonDictionary.json(atKeyPath: "path")
+        path = try jsonDictionary.jsonStrict(atKeyPath: "path")
         properties = jsonDictionary.json(atKeyPath: "properties") ?? [:]
     }
 }
@@ -30,12 +28,11 @@ extension Plist: JSONEncodable {
         [
             "path": path,
             "properties": properties,
-        ] as [String : Any]
+        ] as [String: Any]
     }
 }
 
 extension Plist: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("path"),

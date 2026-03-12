@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SpecParsingError: Error, CustomStringConvertible {
+public enum SpecParsingError: Error, CustomStringConvertible, @unchecked Sendable {
     case unknownTargetType(String)
     case unknownTargetPlatform(String)
     case invalidDependency([String: Any])
@@ -9,6 +9,8 @@ public enum SpecParsingError: Error, CustomStringConvertible {
     case invalidTargetReference(String)
     case invalidTargetPlatformAsArray
     case invalidVersion(String)
+    case mistypedBuildSetting(String)
+    case mistypedProjectAttribute(String)
     case unknownBreakpointType(String)
     case unknownBreakpointScope(String)
     case unknownBreakpointStopOnStyle(String)
@@ -20,35 +22,39 @@ public enum SpecParsingError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case let .unknownTargetType(type):
-            return "Unknown Target type: \(type)"
+            "Unknown Target type: \(type)"
         case let .unknownTargetPlatform(platform):
-            return "Unknown Target platform: \(platform)"
+            "Unknown Target platform: \(platform)"
         case let .invalidDependency(dependency):
-            return "Unknown Target dependency: \(dependency)"
+            "Unknown Target dependency: \(dependency)"
         case let .invalidSourceBuildPhase(error):
-            return "Invalid Source Build Phase: \(error)"
+            "Invalid Source Build Phase: \(error)"
         case let .invalidTargetReference(targetReference):
-            return "Invalid Target Reference Syntax: \(targetReference)"
+            "Invalid Target Reference Syntax: \(targetReference)"
         case .invalidTargetPlatformAsArray:
-            return "Invalid Target platform: Array not allowed with supported destinations"
+            "Invalid Target platform: Array not allowed with supported destinations"
         case let .invalidVersion(version):
-            return "Invalid version: \(version)"
+            "Invalid version: \(version)"
+        case let .mistypedBuildSetting(setting):
+            "Invalid value type in BuildSetting dict. " + setting
+        case let .mistypedProjectAttribute(setting):
+            "Invalid value type in ProjectAttribute dict. " + setting
         case let .unknownPackageRequirement(package):
-            return "Unknown package requirement: \(package)"
+            "Unknown package requirement: \(package)"
         case let .unknownBreakpointType(type):
-            return "Unknown Breakpoint type: \(type)"
+            "Unknown Breakpoint type: \(type)"
         case let .unknownBreakpointScope(scope):
-            return "Unknown Breakpoint scope: \(scope)"
+            "Unknown Breakpoint scope: \(scope)"
         case let .unknownBreakpointStopOnStyle(stopOnStyle):
-            return "Unknown Breakpoint stopOnStyle: \(stopOnStyle)"
+            "Unknown Breakpoint stopOnStyle: \(stopOnStyle)"
         case let .unknownBreakpointActionType(type):
-            return "Unknown Breakpoint Action type: \(type)"
+            "Unknown Breakpoint Action type: \(type)"
         case let .unknownBreakpointActionConveyanceType(type):
-            return "Unknown Breakpoint Action conveyance type: \(type)"
+            "Unknown Breakpoint Action conveyance type: \(type)"
         case let .unknownBreakpointActionSoundName(name):
-            return "Unknown Breakpoint Action sound name: \(name)"
+            "Unknown Breakpoint Action sound name: \(name)"
         case let .invalidConfigsMappingFormat(keys):
-            return "Invalid format: The value for \"\(keys.sorted().joined(separator: ", "))\" in `configs` must be mapping format"
+            "Invalid format: The value for \"\(keys.sorted().joined(separator: ", "))\" in `configs` must be mapping format"
         }
     }
 }

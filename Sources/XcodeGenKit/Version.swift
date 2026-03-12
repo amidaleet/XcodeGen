@@ -1,10 +1,10 @@
 import Foundation
 import ProjectSpec
+import Version
 
 extension Project {
-
     public var xcodeVersion: String {
-        XCodeVersion.parse(options.xcodeVersion ?? "14.3")
+        XCodeVersion.parse(options.xcodeVersion ?? "26.1.1")
     }
 
     public var projectFormat: ProjectFormat {
@@ -32,8 +32,11 @@ extension Project {
     }
 }
 
-public struct XCodeVersion {
+public enum XCodeGenVersion {
+    public static let version = Version("2.45.3")
+}
 
+public enum XCodeVersion {
     public static func parse(_ version: String) -> String {
         if version.contains(".") {
             let parts = version.split(separator: ".").map(String.init)

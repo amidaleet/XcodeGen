@@ -1,12 +1,11 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 import XcodeProj
 
 public typealias BuildType = XCScheme.BuildAction.Entry.BuildFor
 
 public struct Scheme: Equatable {
-
     public var name: String
     public var build: Build
     public var run: Run?
@@ -191,6 +190,7 @@ public struct Scheme: Equatable {
             customWorkingDirectory: String? = nil
         ) {
             self.config = config
+            self.executable = executable
             self.commandLineArguments = commandLineArguments
             self.preActions = preActions
             self.postActions = postActions
@@ -253,7 +253,6 @@ public struct Scheme: Equatable {
         public var preferredScreenCaptureFormat: XCScheme.TestAction.ScreenCaptureFormat
 
         public struct TestTarget: Equatable, ExpressibleByStringLiteral {
-            
             public static let randomExecutionOrderDefault = false
             public static let parallelizableDefault = false
 
@@ -308,8 +307,6 @@ public struct Scheme: Equatable {
             enableThreadSanitizer: Bool = enableThreadSanitizerDefault,
             enableUBSanitizer: Bool = enableUBSanitizerDefault,
             disableMainThreadChecker: Bool = disableMainThreadCheckerDefault,
-            randomExecutionOrder: Bool = false,
-            parallelizable: Bool = false,
             commandLineArguments: [String: Bool] = [:],
             targets: [TestTarget] = [],
             preActions: [ExecutionAction] = [],
@@ -425,7 +422,6 @@ public struct Scheme: Equatable {
 }
 
 extension Scheme: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .dictionary([
@@ -440,9 +436,8 @@ protocol BuildAction: Equatable {
 }
 
 extension Scheme.ExecutionAction: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        script = try jsonDictionary.json(atKeyPath: "script")
+        script = try jsonDictionary.jsonStrict(atKeyPath: "script")
         name = jsonDictionary.json(atKeyPath: "name") ?? "Run Script"
         settingsTarget = jsonDictionary.json(atKeyPath: "settingsTarget")
         shell = jsonDictionary.json(atKeyPath: "shell")
@@ -455,15 +450,14 @@ extension Scheme.ExecutionAction: JSONEncodable {
             "script": script,
             "name": name,
             "settingsTarget": settingsTarget,
-            "shell": shell
+            "shell": shell,
         ]
     }
 }
 
 extension Scheme.SimulateLocation: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        allow = try jsonDictionary.json(atKeyPath: "allow")
+        allow = try jsonDictionary.jsonStrict(atKeyPath: "allow")
         defaultLocation = jsonDictionary.json(atKeyPath: "defaultLocation")
     }
 }
@@ -474,7 +468,7 @@ extension Scheme.SimulateLocation: JSONEncodable {
             "allow": allow,
         ]
 
-        if let defaultLocation = defaultLocation {
+        if let defaultLocation {
             dict["defaultLocation"] = defaultLocation
         }
 
@@ -483,7 +477,6 @@ extension Scheme.SimulateLocation: JSONEncodable {
 }
 
 extension Scheme.Management: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         shared = jsonDictionary.json(atKeyPath: "shared") ?? Scheme.Management.sharedDefault
         orderHint = jsonDictionary.json(atKeyPath: "orderHint")
@@ -499,11 +492,11 @@ extension Scheme.Management: JSONEncodable {
             dict["shared"] = shared
         }
 
-        if let isShown = isShown {
+        if let isShown {
             dict["isShown"] = isShown
         }
 
-        if let orderHint = orderHint {
+        if let orderHint {
             dict["orderHint"] = orderHint
         }
 
@@ -512,7 +505,6 @@ extension Scheme.Management: JSONEncodable {
 }
 
 extension Scheme.Run: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         config = jsonDictionary.json(atKeyPath: "config")
         commandLineArguments = jsonDictionary.json(atKeyPath: "commandLineArguments") ?? [:]
@@ -524,11 +516,11 @@ extension Scheme.Run: JSONObjectConvertible {
         } else {
             enableGPUFrameCaptureMode = XCScheme.LaunchAction.defaultGPUFrameCaptureMode
         }
-
         // support deprecated gpuValidationMode enum that was removed from XcodeProj
         if let gpuValidationMode: String = jsonDictionary.json(atKeyPath: "enableGPUValidationMode") {
             switch gpuValidationMode {
-            case "enabled", "extended": enableGPUValidationMode = true
+            case "enabled",
+                 "extended": enableGPUValidationMode = true
             case "disabled": enableGPUValidationMode = false
             default: enableGPUValidationMode = Scheme.Run.enableGPUValidationModeDefault
             }
@@ -579,13 +571,13 @@ extension Scheme.Run: JSONEncodable {
             "askForAppToLaunch": askForAppToLaunch,
             "launchAutomaticallySubstyle": launchAutomaticallySubstyle,
             "executable": executable,
-            "macroExpansion": macroExpansion
+            "macroExpansion": macroExpansion,
         ]
 
         if enableGPUFrameCaptureMode != XCScheme.LaunchAction.defaultGPUFrameCaptureMode {
             dict["enableGPUFrameCaptureMode"] = enableGPUFrameCaptureMode.toJSONValue()
         }
-        
+
         if enableGPUValidationMode != Scheme.Run.enableGPUValidationModeDefault {
             dict["enableGPUValidationMode"] = enableGPUValidationMode
         }
@@ -622,13 +614,13 @@ extension Scheme.Run: JSONEncodable {
             dict["debugEnabled"] = debugEnabled
         }
 
-        if let simulateLocation = simulateLocation {
+        if let simulateLocation {
             dict["simulateLocation"] = simulateLocation.toJSONValue()
         }
-        if let storeKitConfiguration = storeKitConfiguration {
+        if let storeKitConfiguration {
             dict["storeKitConfiguration"] = storeKitConfiguration
         }
-        if let customLLDBInit = customLLDBInit {
+        if let customLLDBInit {
             dict["customLLDBInit"] = customLLDBInit
         }
         if let customWorkingDirectory = customWorkingDirectory {
@@ -639,7 +631,6 @@ extension Scheme.Run: JSONEncodable {
 }
 
 extension Scheme.Test: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .object("testPlans", TestPlan.pathProperties),
@@ -648,7 +639,6 @@ extension Scheme.Test: PathContainer {
 }
 
 extension Scheme.Test: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         config = jsonDictionary.json(atKeyPath: "config")
         gatherCoverageData = jsonDictionary.json(atKeyPath: "gatherCoverageData") ?? Scheme.Test.gatherCoverageDataDefault
@@ -656,12 +646,12 @@ extension Scheme.Test: JSONObjectConvertible {
         if let coverages = jsonDictionary["coverageTargets"] as? [Any] {
             coverageTargets = try coverages.compactMap { target in
                 if let string = target as? String {
-                    return try TestableTargetReference(string)
+                    try TestableTargetReference(string)
                 } else if let dictionary = target as? JSONDictionary,
                           let target: TestableTargetReference = try? .init(jsonDictionary: dictionary) {
-                    return target
+                    target
                 } else {
-                    return nil
+                    nil
                 }
             }
         } else {
@@ -677,11 +667,11 @@ extension Scheme.Test: JSONObjectConvertible {
         if let targets = jsonDictionary["targets"] as? [Any] {
             self.targets = try targets.compactMap { target in
                 if let string = target as? String {
-                    return try TestTarget(targetReference: TestableTargetReference(string))
+                    try TestTarget(targetReference: TestableTargetReference(string))
                 } else if let dictionary = target as? JSONDictionary {
-                    return try TestTarget(jsonDictionary: dictionary)
+                    try TestTarget(jsonDictionary: dictionary)
                 } else {
-                    return nil
+                    nil
                 }
             }
         } else {
@@ -714,8 +704,8 @@ extension Scheme.Test: JSONEncodable {
             "config": config,
             "language": language,
             "region": region,
-            "coverageTargets": coverageTargets.map { $0.reference },
-            "macroExpansion": macroExpansion
+            "coverageTargets": coverageTargets.map(\.reference),
+            "macroExpansion": macroExpansion,
         ]
 
         if gatherCoverageData != Scheme.Test.gatherCoverageDataDefault {
@@ -746,7 +736,7 @@ extension Scheme.Test: JSONEncodable {
             dict["debugEnabled"] = debugEnabled
         }
 
-        if let customLLDBInit = customLLDBInit {
+        if let customLLDBInit {
             dict["customLLDBInit"] = customLLDBInit
         }
 
@@ -767,9 +757,8 @@ extension Scheme.Test: JSONEncodable {
 }
 
 extension Scheme.Test.TestTarget: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        if let name: String = jsonDictionary.json(atKeyPath: "name")  {
+        if let name: String = jsonDictionary.json(atKeyPath: "name") {
             targetReference = try TestableTargetReference(name)
         } else if let local: String = jsonDictionary.json(atKeyPath: "local") {
             self.targetReference = TestableTargetReference.local(local)
@@ -778,7 +767,7 @@ extension Scheme.Test.TestTarget: JSONObjectConvertible {
         } else if let package: String = jsonDictionary.json(atKeyPath: "package") {
             self.targetReference = TestableTargetReference.package(package)
         } else {
-            self.targetReference = try jsonDictionary.json(atKeyPath: "target")
+            self.targetReference = try jsonDictionary.jsonStrict(atKeyPath: "target")
         }
         randomExecutionOrder = jsonDictionary.json(atKeyPath: "randomExecutionOrder") ?? Scheme.Test.TestTarget.randomExecutionOrderDefault
         parallelizable = jsonDictionary.json(atKeyPath: "parallelizable") ?? Scheme.Test.TestTarget.parallelizableDefault
@@ -792,7 +781,7 @@ extension Scheme.Test.TestTarget: JSONObjectConvertible {
 extension Scheme.Test.TestTarget: JSONEncodable {
     public func toJSONValue() -> Any {
         if randomExecutionOrder == Scheme.Test.TestTarget.randomExecutionOrderDefault,
-            parallelizable == Scheme.Test.TestTarget.parallelizableDefault {
+           parallelizable == Scheme.Test.TestTarget.parallelizableDefault {
             return targetReference.reference
         }
 
@@ -806,7 +795,7 @@ extension Scheme.Test.TestTarget: JSONEncodable {
         if parallelizable != Scheme.Test.TestTarget.parallelizableDefault {
             dict["parallelizable"] = parallelizable
         }
-        if let location = location {
+        if let location {
             dict["location"] = location
         }
         if skipped {
@@ -818,7 +807,6 @@ extension Scheme.Test.TestTarget: JSONEncodable {
 }
 
 extension Scheme.Profile: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         config = jsonDictionary.json(atKeyPath: "config")
         commandLineArguments = jsonDictionary.json(atKeyPath: "commandLineArguments") ?? [:]
@@ -845,7 +833,6 @@ extension Scheme.Profile: JSONEncodable {
 }
 
 extension Scheme.Analyze: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         config = jsonDictionary.json(atKeyPath: "config")
     }
@@ -860,7 +847,6 @@ extension Scheme.Analyze: JSONEncodable {
 }
 
 extension Scheme.Archive: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         config = jsonDictionary.json(atKeyPath: "config")
         customArchiveName = jsonDictionary.json(atKeyPath: "customArchiveName")
@@ -888,10 +874,9 @@ extension Scheme.Archive: JSONEncodable {
 }
 
 extension Scheme: NamedJSONDictionaryConvertible {
-
     public init(name: String, jsonDictionary: JSONDictionary) throws {
         self.name = name
-        build = try jsonDictionary.json(atKeyPath: "build")
+        build = try jsonDictionary.jsonStrict(atKeyPath: "build")
         run = jsonDictionary.json(atKeyPath: "run")
         test = jsonDictionary.json(atKeyPath: "test")
         analyze = jsonDictionary.json(atKeyPath: "analyze")
@@ -916,9 +901,8 @@ extension Scheme: JSONEncodable {
 }
 
 extension Scheme.Build: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-        let targetDictionary: JSONDictionary = try jsonDictionary.json(atKeyPath: "targets")
+        let targetDictionary: JSONDictionary = try jsonDictionary.jsonStrict(atKeyPath: "targets")
         var targets: [Scheme.BuildTarget] = []
         for (targetRepr, possibleBuildTypes) in targetDictionary {
             let buildTypes: [BuildType]
@@ -931,7 +915,7 @@ extension Scheme.Build: JSONObjectConvertible {
                 default: buildTypes = BuildType.all
                 }
             } else if let enabledDictionary = possibleBuildTypes as? [String: Bool] {
-                buildTypes = enabledDictionary.filter { $0.value }.compactMap { BuildType.from(jsonValue: $0.key) }
+                buildTypes = enabledDictionary.filter(\.value).compactMap { BuildType.from(jsonValue: $0.key) }
             } else if let array = possibleBuildTypes as? [String] {
                 buildTypes = array.compactMap(BuildType.from)
             } else {
@@ -973,18 +957,22 @@ extension Scheme.Build: JSONEncodable {
     }
 }
 
-extension BuildType: JSONUtilities.JSONPrimitiveConvertible {
-
+extension BuildType: @retroactive JSONPrimitiveConvertible {
     public typealias JSONType = String
 
     public static func from(jsonValue: String) -> BuildType? {
         switch jsonValue {
-        case "test", "testing": return .testing
-        case "profile", "profiling": return .profiling
-        case "run", "running": return .running
-        case "archive", "archiving": return .archiving
-        case "analyze", "analyzing": return .analyzing
-        default: return nil
+        case "test",
+             "testing": .testing
+        case "profile",
+             "profiling": .profiling
+        case "run",
+             "running": .running
+        case "archive",
+             "archiving": .archiving
+        case "analyze",
+             "analyzing": .analyzing
+        default: nil
         }
     }
 
@@ -996,49 +984,48 @@ extension BuildType: JSONUtilities.JSONPrimitiveConvertible {
 extension BuildType: JSONEncodable {
     public func toJSONValue() -> Any {
         switch self {
-        case .testing: return "testing"
-        case .profiling: return "profiling"
-        case .running: return "running"
-        case .archiving: return "archiving"
-        case .analyzing: return "analyzing"
+        case .testing: "testing"
+        case .profiling: "profiling"
+        case .running: "running"
+        case .archiving: "archiving"
+        case .analyzing: "analyzing"
         }
     }
 }
 
-extension XCScheme.EnvironmentVariable: JSONUtilities.JSONObjectConvertible {
+extension XCScheme.EnvironmentVariable: @retroactive JSONObjectConvertible {
     public static let enabledDefault = true
 
     private static func parseValue(_ value: Any) -> String {
         if let bool = value as? Bool {
-            return bool ? "YES" : "NO"
+            bool ? "YES" : "NO"
         } else {
-            return String(describing: value)
+            String(describing: value)
         }
     }
 
     public init(jsonDictionary: JSONDictionary) throws {
-
         let value: String
         if let jsonValue = jsonDictionary["value"] {
             value = XCScheme.EnvironmentVariable.parseValue(jsonValue)
         } else {
             // will throw error
-            value = try jsonDictionary.json(atKeyPath: "value")
+            value = try jsonDictionary.jsonStrict(atKeyPath: "value")
         }
-        let variable: String = try jsonDictionary.json(atKeyPath: "variable")
+        let variable: String = try jsonDictionary.jsonStrict(atKeyPath: "variable")
         let enabled: Bool = jsonDictionary.json(atKeyPath: "isEnabled") ?? XCScheme.EnvironmentVariable.enabledDefault
         self.init(variable: variable, value: value, enabled: enabled)
     }
 
     static func parseAll(jsonDictionary: JSONDictionary) throws -> [XCScheme.EnvironmentVariable] {
         if let variablesDictionary: [String: Any] = jsonDictionary.json(atKeyPath: "environmentVariables") {
-            return variablesDictionary.mapValues(parseValue)
+            variablesDictionary.mapValues(parseValue)
                 .map { XCScheme.EnvironmentVariable(variable: $0.key, value: $0.value, enabled: true) }
                 .sorted { $0.variable < $1.variable }
         } else if let variablesArray: [JSONDictionary] = jsonDictionary.json(atKeyPath: "environmentVariables") {
-            return try variablesArray.map(XCScheme.EnvironmentVariable.init)
+            try variablesArray.map(XCScheme.EnvironmentVariable.init)
         } else {
-            return []
+            []
         }
     }
 }
@@ -1062,33 +1049,33 @@ extension XCScheme.LaunchAction.GPUFrameCaptureMode: JSONEncodable {
     public func toJSONValue() -> Any {
         switch self {
         case .autoEnabled:
-            return "autoEnabled"
+            "autoEnabled"
         case .metal:
-            return "metal"
+            "metal"
         case .openGL:
-            return "openGL"
+            "openGL"
         case .disabled:
-            return "disabled"
+            "disabled"
         }
     }
 
     static func fromJSONValue(_ string: String) -> XCScheme.LaunchAction.GPUFrameCaptureMode {
         switch string {
         case "autoEnabled":
-            return .autoEnabled
+            .autoEnabled
         case "metal":
-            return .metal
+            .metal
         case "openGL":
-            return .openGL
+            .openGL
         case "disabled":
-            return .disabled
+            .disabled
         default:
             fatalError("Invalid enableGPUFrameCaptureMode value. Valid values are: autoEnabled, metal, openGL, disabled")
         }
     }
 }
 
-extension XCScheme.TestAction.ScreenCaptureFormat: JSONEncodable {
+extension XCScheme.TestAction.ScreenCaptureFormat: JSONEncodable, @retroactive @unchecked Sendable {
     public func toJSONValue() -> Any {
         rawValue
     }

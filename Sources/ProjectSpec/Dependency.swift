@@ -1,11 +1,11 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 
 public struct Dependency: Equatable {
     public static let removeHeadersDefault = true
     public static let implicitDefault = false
     public static let weakLinkDefault = false
-    public static let platformFilterDefault: PlatformFilter = .all
+    public nonisolated(unsafe) static let platformFilterDefault: PlatformFilter = .all
 
     public var type: DependencyType
     public var reference: String
@@ -45,14 +45,14 @@ public struct Dependency: Equatable {
         self.platforms = platforms
         self.copyPhase = copyPhase
     }
-    
+
     public enum PlatformFilter: String, Equatable {
         case all
         case iOS
         case macOS
     }
-    
-    public enum CarthageLinkType: String {
+
+    public enum CarthageLinkType: String, Sendable {
         case dynamic
         case `static`
 
@@ -72,13 +72,13 @@ public struct Dependency: Equatable {
 extension Dependency {
     public var uniqueID: String {
         switch type {
-        case .package(let products):
+        case let .package(products):
             if !products.isEmpty {
-                return "\(reference)/\(products.joined(separator: ","))"
+                "\(reference)/\(products.joined(separator: ","))"
             } else {
-                return reference
+                reference
             }
-        default: return reference
+        default: reference
         }
     }
 }
@@ -91,7 +91,6 @@ extension Dependency: Hashable {
 }
 
 extension Dependency: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         if let target: String = jsonDictionary.json(atKeyPath: "target") {
             type = .target
@@ -139,17 +138,17 @@ extension Dependency: JSONObjectConvertible {
         if let bool: Bool = jsonDictionary.json(atKeyPath: "weak") {
             weakLink = bool
         }
-        
+
         if let platformFilterString: String = jsonDictionary.json(atKeyPath: "platformFilter"), let platformFilter = PlatformFilter(rawValue: platformFilterString) {
             self.platformFilter = platformFilter
         } else {
             self.platformFilter = .all
         }
-        
+
         if let destinationFilters: [SupportedDestination] = jsonDictionary.json(atKeyPath: "destinationFilters") {
             self.destinationFilters = destinationFilters
         }
-        
+
         if let platforms: [ProjectSpec.Platform] = jsonDictionary.json(atKeyPath: "platforms") {
             self.platforms = Set(platforms)
         }
@@ -168,7 +167,7 @@ extension Dependency: JSONEncodable {
             "link": link,
             "platforms": platforms?.map(\.rawValue).sorted(),
             "copy": copyPhase?.toJSONValue(),
-            "destinationFilters": destinationFilters?.map { $0.rawValue },
+            "destinationFilters": destinationFilters?.map(\.rawValue),
         ]
 
         if removeHeaders != Dependency.removeHeadersDefault {
@@ -186,7 +185,7 @@ extension Dependency: JSONEncodable {
             dict["target"] = reference
         case .framework:
             dict["framework"] = reference
-        case .carthage(let findFrameworks, let linkType):
+        case let .carthage(findFrameworks, linkType):
             dict["carthage"] = reference
             if let findFrameworks = findFrameworks {
                 dict["findFrameworks"] = findFrameworks
@@ -205,7 +204,6 @@ extension Dependency: JSONEncodable {
 }
 
 extension Dependency: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("framework"),

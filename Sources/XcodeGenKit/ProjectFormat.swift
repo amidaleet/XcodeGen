@@ -1,8 +1,10 @@
-public extension ProjectFormat {
-    static let `default`: ProjectFormat = .xcode16_0
+extension ProjectFormat {
+    public static let `default`: ProjectFormat = .xcode16_0
 }
 
-public enum ProjectFormat: String {
+// swiftlint:disable identifier_name
+
+public enum ProjectFormat: String, Sendable {
     case xcode16_3
     case xcode16_0
     case xcode15_3
@@ -21,17 +23,23 @@ public enum ProjectFormat: String {
 
     public var preferredProjectObjectVersion: UInt? {
         switch self {
-        case .xcode16_3, .xcode16_0: objectVersion
-        case .xcode15_3, .xcode15_0, .xcode14_0: nil
+        case .xcode16_3,
+             .xcode16_0: objectVersion
+        case .xcode15_3,
+             .xcode15_0,
+             .xcode14_0: nil
         }
     }
 
     public var compatibilityVersion: String? {
         switch self {
-        case .xcode16_3, .xcode16_0: nil
+        case .xcode16_3,
+             .xcode16_0: nil
         case .xcode15_3: "Xcode 15.3"
         case .xcode15_0: "Xcode 15.0"
         case .xcode14_0: "Xcode 14.0"
         }
     }
 }
+
+// swiftlint:enable identifier_name

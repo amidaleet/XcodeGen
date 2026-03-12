@@ -1,16 +1,15 @@
 //
 //  File.swift
-//  
+//
 //
 //  Created by Yonas Kolb on 1/5/20.
 //
 
 import Foundation
-import JSONUtilities
+import JSONutils
 import enum XcodeProj.BuildPhase
 
-public struct FileType: Equatable {
-
+public struct FileType: Equatable, Sendable {
     public enum Defaults {
         public static let file = true
     }
@@ -66,14 +65,12 @@ extension FileType: JSONEncodable {
 }
 
 extension FileType {
-
     public static let defaultFileTypes: [String: FileType] = [
         // resources
         "bundle": FileType(buildPhase: .resources),
         "xcassets": FileType(buildPhase: .resources),
         "storekit": FileType(buildPhase: .resources),
         "xcstrings": FileType(buildPhase: .resources),
-        "icon": FileType(buildPhase: .resources),
 
         // sources
         "swift": FileType(buildPhase: .sources),
@@ -91,7 +88,7 @@ extension FileType {
         "intentdefinition": FileType(buildPhase: .sources),
         "metal": FileType(buildPhase: .sources),
         "mlmodel": FileType(buildPhase: .sources),
-        "mlpackage" : FileType(buildPhase: .sources),
+        "mlpackage": FileType(buildPhase: .sources),
         "mlmodelc": FileType(buildPhase: .resources),
         "rcproject": FileType(buildPhase: .sources),
         "iig": FileType(buildPhase: .sources),

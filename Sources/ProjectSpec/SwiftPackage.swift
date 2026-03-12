@@ -1,16 +1,15 @@
 import Foundation
-import XcodeProj
-import JSONUtilities
+import JSONutils
 import Version
+import XcodeProj
 
 public enum SwiftPackage: Equatable {
-
     public typealias VersionRequirement = XCRemoteSwiftPackageReference.VersionRequirement
 
     static let githubPrefix = "https://github.com/"
 
     case remote(url: String, versionRequirement: VersionRequirement)
-    case local(path: String, group: String?, excludeFromProject: Bool)
+    case local(path: String, group: String?, excludeFromProject: Bool = false)
 
     public var isLocal: Bool {
         if case .local = self {
@@ -21,7 +20,6 @@ public enum SwiftPackage: Equatable {
 }
 
 extension SwiftPackage: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         if let path: String = jsonDictionary.json(atKeyPath: "path") {
             let customLocation: String? = jsonDictionary.json(atKeyPath: "group")
@@ -32,10 +30,10 @@ extension SwiftPackage: JSONObjectConvertible {
             try Self.validateVersion(versionRequirement: versionRequirement)
             let url: String
             if jsonDictionary["github"] != nil {
-                let github: String = try jsonDictionary.json(atKeyPath: "github")
+                let github: String = try jsonDictionary.jsonStrict(atKeyPath: "github")
                 url = "\(Self.githubPrefix)\(github)"
             } else {
-                url = try jsonDictionary.json(atKeyPath: "url")
+                url = try jsonDictionary.jsonStrict(atKeyPath: "url")
             }
             self = .remote(url: url, versionRequirement: versionRequirement)
         }
@@ -43,18 +41,17 @@ extension SwiftPackage: JSONObjectConvertible {
 
     private static func validateVersion(versionRequirement: VersionRequirement) throws {
         switch versionRequirement {
-
-        case .upToNextMajorVersion(let version):
+        case let .upToNextMajorVersion(version):
             try _ = Version.parse(version)
 
-        case .upToNextMinorVersion(let version):
+        case let .upToNextMinorVersion(version):
             try _ = Version.parse(version)
 
-        case .range(let from, let to):
+        case let .range(from, to):
             try _ = Version.parse(from)
             try _ = Version.parse(to)
 
-        case .exact(let version):
+        case let .exact(version):
             try _ = Version.parse(version)
 
         default:
@@ -64,11 +61,10 @@ extension SwiftPackage: JSONObjectConvertible {
 }
 
 extension SwiftPackage: JSONEncodable {
-
     public func toJSONValue() -> Any {
         var dictionary: JSONDictionary = [:]
         switch self {
-        case .remote(let url, let versionRequirement):
+        case let .remote(url, versionRequirement):
             if url.hasPrefix(Self.githubPrefix) {
                 dictionary["github"] = url.replacingOccurrences(of: Self.githubPrefix, with: "")
             } else {
@@ -76,19 +72,18 @@ extension SwiftPackage: JSONEncodable {
             }
 
             switch versionRequirement {
-
-            case .upToNextMajorVersion(let version):
+            case let .upToNextMajorVersion(version):
                 dictionary["majorVersion"] = version
-            case .upToNextMinorVersion(let version):
+            case let .upToNextMinorVersion(version):
                 dictionary["minorVersion"] = version
-            case .range(let from, let to):
+            case let .range(from, to):
                 dictionary["minVersion"] = from
                 dictionary["maxVersion"] = to
-            case .exact(let version):
+            case let .exact(version):
                 dictionary["exactVersion"] = version
-            case .branch(let branch):
+            case let .branch(branch):
                 dictionary["branch"] = branch
-            case .revision(let revision):
+            case let .revision(revision):
                 dictionary["revision"] = revision
             }
             return dictionary
@@ -102,17 +97,16 @@ extension SwiftPackage: JSONEncodable {
     }
 }
 
-extension SwiftPackage.VersionRequirement: JSONUtilities.JSONObjectConvertible {
-
+extension SwiftPackage.VersionRequirement: @retroactive JSONObjectConvertible {
     public init(jsonDictionary: JSONDictionary) throws {
         func json(atKeyPath keyPath: String) -> String? {
             if jsonDictionary[keyPath] != nil {
                 do {
-                    let value: String = try jsonDictionary.json(atKeyPath: .init(rawValue: keyPath))
+                    let value: String = try jsonDictionary.jsonStrict(atKeyPath: KeyPath(rawValue: keyPath))
                     return value
                 } catch {
                     do {
-                        let value: Double = try jsonDictionary.json(atKeyPath: .init(rawValue: keyPath))
+                        let value: Double = try jsonDictionary.jsonStrict(atKeyPath: KeyPath(rawValue: keyPath))
                         return String(value)
                     } catch {
                         return nil
@@ -121,7 +115,7 @@ extension SwiftPackage.VersionRequirement: JSONUtilities.JSONObjectConvertible {
             }
             return nil
         }
-        
+
         if let exactVersion = json(atKeyPath: "exactVersion") {
             self = .exact(exactVersion)
         } else if let version = json(atKeyPath: "version") {

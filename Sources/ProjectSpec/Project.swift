@@ -1,10 +1,10 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
+import XcodeProj
 import Yams
 
 public struct Project: BuildSettingsContainer {
-
     public var basePath: Path
     public var name: String
     public var targets: [Target] {
@@ -27,10 +27,9 @@ public struct Project: BuildSettingsContainer {
     public var schemes: [Scheme]
     public var breakpoints: [Breakpoint]
     public var options: SpecOptions
-    public var attributes: [String: Any]
+    public var attributes: [String: ProjectAttribute]
     public var fileGroups: [String]
     public var configFiles: [String: String]
-    public var include: [String] = []
     public var projectReferences: [ProjectReference] = [] {
         didSet {
             projectReferencesMap = Dictionary(uniqueKeysWithValues: projectReferences.map { ($0.name, $0) })
@@ -55,7 +54,7 @@ public struct Project: BuildSettingsContainer {
         options: SpecOptions = SpecOptions(),
         fileGroups: [String] = [],
         configFiles: [String: String] = [:],
-        attributes: [String: Any] = [:],
+        attributes: [String: ProjectAttribute] = [:],
         projectReferences: [ProjectReference] = []
     ) {
         self.basePath = basePath
@@ -108,13 +107,9 @@ public struct Project: BuildSettingsContainer {
 }
 
 extension Project: CustomDebugStringConvertible {
-
     public var debugDescription: String {
         var string = "Name: \(name)"
         let indent = "  "
-        if !include.isEmpty {
-            string += "\nInclude:\n\(indent)" + include.map { $0.description }.joined(separator: "\n\(indent)")
-        }
 
         if !settingGroups.isEmpty {
             string += "\nSetting Groups:\n\(indent)" + settingGroups.keys
@@ -123,13 +118,13 @@ extension Project: CustomDebugStringConvertible {
         }
 
         if !targets.isEmpty {
-            string += "\nTargets:\n\(indent)" + targets.map { $0.description }.joined(separator: "\n\(indent)")
+            string += "\nTargets:\n\(indent)" + targets.map(\.description).joined(separator: "\n\(indent)")
         }
         if !aggregateTargets.isEmpty {
-            string += "\nAggregate Targets:\n\(indent)" + aggregateTargets.map { $0.description }.joined(separator: "\n\(indent)")
+            string += "\nAggregate Targets:\n\(indent)" + aggregateTargets.map(\.description).joined(separator: "\n\(indent)")
         }
         if !schemes.isEmpty {
-            let allSchemes = targets.filter { $0.scheme != nil }.map { $0.name } + schemes.map { $0.name }
+            let allSchemes = targets.filter { $0.scheme != nil }.map(\.name) + schemes.map(\.name)
             string += "\nSchemes:\n\(indent)" + allSchemes.joined(separator: "\n\(indent)")
         }
 
@@ -138,7 +133,6 @@ extension Project: CustomDebugStringConvertible {
 }
 
 extension Project: Equatable {
-
     public static func == (lhs: Project, rhs: Project) -> Bool {
         lhs.name == rhs.name &&
             lhs.targets == rhs.targets &&
@@ -156,84 +150,95 @@ extension Project: Equatable {
     }
 }
 
-extension Project {
+extension Project: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(basePath)
+    }
+}
 
+extension Project {
     public init(path: Path) throws {
         let spec = try SpecFile(path: path)
         try self.init(spec: spec)
     }
 
-    public init(spec: SpecFile) throws {
-        try self.init(basePath: spec.basePath, jsonDictionary: spec.resolvedDictionary())
+    init(spec: SpecFile) throws {
+        try self.init(
+            basePath: spec.basePath,
+            jsonDictionary: spec.resolvedDictionary()
+        )
     }
 
     public init(basePath: Path = "", jsonDictionary: JSONDictionary) throws {
         self.basePath = basePath
 
-        let jsonDictionary = Project.resolveProject(jsonDictionary: jsonDictionary)
-        let buildSettingsParser = BuildSettingsParser(jsonDictionary: jsonDictionary)
+        var jsonDictionary = jsonDictionary
+        Project.resolveProject(&jsonDictionary)
 
-        name = try jsonDictionary.json(atKeyPath: "name")
+        name = try (jsonDictionary["name"] as? String).get(
+            elseThrow: DecodingError(
+                dictionary: jsonDictionary,
+                keyPath: .key("name"),
+                expectedType: String.self,
+                value: jsonDictionary["name"] as Any,
+                reason: .keyNotFound
+            )
+        )
+        let buildSettingsParser = BuildSettingsParser(jsonDictionary: jsonDictionary)
 
         settings = try buildSettingsParser.parse()
         settingGroups = try buildSettingsParser.parseSettingGroups()
-
-        let configs: [String: String] = jsonDictionary.json(atKeyPath: "configs") ?? [:]
-        self.configs = configs.isEmpty ? Config.defaultConfigs :
-            configs.map { Config(name: $0, type: ConfigType(rawValue: $1)) }.sorted { $0.name < $1.name }
-        targets = try jsonDictionary.json(atKeyPath: "targets", parallel: true).sorted { $0.name < $1.name }
+        let configs: [String: String]? = jsonDictionary["configs"] as? [String: String]
+        self.configs = configs?.map { Config(name: $0, type: ConfigType(rawValue: $1)) }.sorted { $0.name < $1.name }
+            ?? Config.defaultConfigs
+        self.targets = try jsonDictionary.json(atKeyPath: "targets", parallel: true).sorted { $0.name < $1.name }
         aggregateTargets = try jsonDictionary.json(atKeyPath: "aggregateTargets").sorted { $0.name < $1.name }
         projectReferences = try jsonDictionary.json(atKeyPath: "projectReferences").sorted { $0.name < $1.name }
         schemes = try jsonDictionary.json(atKeyPath: "schemes")
-        if jsonDictionary["breakpoints"] != nil {
-            breakpoints = try jsonDictionary.json(atKeyPath: "breakpoints", invalidItemBehaviour: .fail)
+        if jsonDictionary["breakpoints"].isSome {
+            breakpoints = try jsonDictionary.jsonStrict(atKeyPath: "breakpoints", invalidItemBehaviour: .fail)
         } else {
             breakpoints = []
         }
         fileGroups = jsonDictionary.json(atKeyPath: "fileGroups") ?? []
         configFiles = jsonDictionary.json(atKeyPath: "configFiles") ?? [:]
-        attributes = jsonDictionary.json(atKeyPath: "attributes") ?? [:]
-        include = jsonDictionary.json(atKeyPath: "include") ?? []
-        if jsonDictionary["packages"] != nil {
-            packages = try jsonDictionary.json(atKeyPath: "packages", invalidItemBehaviour: .fail)
+        attributes = try jsonDictionary.json(atKeyPath: "attributes")?.asProjectAttributes() ?? [:]
+        if jsonDictionary["packages"].isSome {
+            packages = try jsonDictionary.jsonStrict(atKeyPath: "packages", invalidItemBehaviour: .fail)
         } else {
             packages = [:]
         }
         // For backward compatibility of old `localPackages:` format
-        if let localPackages: [String] = jsonDictionary.json(atKeyPath: "localPackages") {
+        if let localPackages = jsonDictionary["localPackages"] as? [String] {
             packages.merge(localPackages.reduce(into: [String: SwiftPackage]()) {
                 // Project name will be obtained by resolved abstractpath's lastComponent for dealing with some path case, like "../"
                 let packageName = (basePath + Path($1).normalize()).lastComponent
                 $0[packageName] = .local(path: $1, group: nil, excludeFromProject: false)
-            }
-            )
+            })
         }
-        if jsonDictionary["options"] != nil {
-            options = try jsonDictionary.json(atKeyPath: "options")
+        if jsonDictionary["options"].isSome {
+            options = try jsonDictionary.jsonStrict(atKeyPath: "options")
         } else {
             options = SpecOptions()
         }
+
         targetsMap = Dictionary(uniqueKeysWithValues: targets.map { ($0.name, $0) })
         aggregateTargetsMap = Dictionary(uniqueKeysWithValues: aggregateTargets.map { ($0.name, $0) })
         projectReferencesMap = Dictionary(uniqueKeysWithValues: projectReferences.map { ($0.name, $0) })
     }
 
-    static func resolveProject(jsonDictionary: JSONDictionary) -> JSONDictionary {
-        var jsonDictionary = jsonDictionary
-
+    static func resolveProject(_ jsonDictionary: inout JSONDictionary) {
         // resolve multiple times so that we support both multi-platform templates,
         // as well as platform specific templates in multi-platform targets
-        jsonDictionary = Target.resolveMultiplatformTargets(jsonDictionary: jsonDictionary)
-        jsonDictionary = Target.resolveTargetTemplates(jsonDictionary: jsonDictionary)
-        jsonDictionary = Scheme.resolveSchemeTemplates(jsonDictionary: jsonDictionary)
-        jsonDictionary = Target.resolveMultiplatformTargets(jsonDictionary: jsonDictionary)
-
-        return jsonDictionary
+        Target.resolveMultiplatformTargets(&jsonDictionary)
+        Target.resolveTargetTemplates(&jsonDictionary)
+        Scheme.resolveSchemeTemplates(&jsonDictionary)
+        Target.resolveMultiplatformTargets(&jsonDictionary)
     }
 }
 
 extension Project: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("configFiles"),
@@ -242,16 +247,16 @@ extension Project: PathContainer {
             .object("targetTemplates", Target.pathProperties),
             .object("aggregateTargets", AggregateTarget.pathProperties),
             .object("schemes", Scheme.pathProperties),
+            .string("projectReferences"), // May be provided in short form
             .object("projectReferences", ProjectReference.pathProperties),
             .object("packages", SwiftPackage.pathProperties),
             .string("localPackages"),
-            .string("fileGroups")
+            .string("fileGroups"),
         ]
     }
 }
 
 extension Project {
-
     public var allTrackedFiles: [Path] {
         var files: [Path] = []
         files.append(contentsOf: configFilePaths)
@@ -270,7 +275,7 @@ extension Project {
             files.append(contentsOf: target.configFilePaths)
             for source in target.sources {
                 let sourcePath = basePath + source.path
-                
+
                 let type = source.type ?? options.defaultSourceDirectoryType ?? .group
                 if type.projectTracksChildren {
                     let sourceChildren = (try? sourcePath.recursiveChildren()) ?? []
@@ -284,7 +289,6 @@ extension Project {
 }
 
 extension SourceType {
-    
     var projectTracksChildren: Bool {
         switch self {
         case .file: false
@@ -296,7 +300,6 @@ extension SourceType {
 }
 
 extension BuildSettingsContainer {
-
     fileprivate var configFilePaths: [Path] {
         configFiles.values.map { Path($0) }
     }
@@ -320,7 +323,6 @@ extension Project: JSONEncodable {
         dictionary["settings"] = settings.toJSONValue()
         dictionary["fileGroups"] = fileGroups
         dictionary["configFiles"] = configFiles
-        dictionary["include"] = include
         dictionary["attributes"] = attributes
         dictionary["packages"] = packages.mapValues { $0.toJSONValue() }
         dictionary["targets"] = Dictionary(uniqueKeysWithValues: targetPairs)

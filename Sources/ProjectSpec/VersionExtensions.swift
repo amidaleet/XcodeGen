@@ -8,8 +8,9 @@
 import Foundation
 import Version
 
-extension Version: Swift.ExpressibleByStringLiteral {
-
+extension Version: @retroactive ExpressibleByExtendedGraphemeClusterLiteral {}
+extension Version: @retroactive ExpressibleByUnicodeScalarLiteral {}
+extension Version: @retroactive ExpressibleByStringLiteral {
     public static func parse(_ string: String) throws -> Version {
         if let version = Version(tolerant: string) {
             return version
@@ -19,7 +20,7 @@ extension Version: Swift.ExpressibleByStringLiteral {
     }
 
     public static func parse(_ double: Double) throws -> Version {
-        return try Version.parse(String(double))
+        try Version.parse(String(double))
     }
 
     public init(stringLiteral value: String) {

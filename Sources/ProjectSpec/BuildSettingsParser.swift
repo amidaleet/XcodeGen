@@ -1,5 +1,9 @@
+//
+//  Created by Бодров Александр Сергеевич on 13.03.2026.
+//
+
 import Foundation
-import JSONUtilities
+import JSONutils
 
 /// A helper for extracting and validating the `Settings` object from a JSON dictionary.
 struct BuildSettingsParser {
@@ -10,7 +14,7 @@ struct BuildSettingsParser {
     /// - Returns: A valid `Settings` object
     func parse() throws -> Settings {
         do {
-            return try jsonDictionary.json(atKeyPath: "settings")
+            return try jsonDictionary.jsonStrict(atKeyPath: "settings")
         } catch let specParsingError as SpecParsingError {
             // Re-throw `SpecParsingError` to prevent the misuse of settings.configs.
             throw specParsingError
@@ -25,7 +29,7 @@ struct BuildSettingsParser {
     /// - Returns: Parsed setting groups or default groups if parsing fails
     func parseSettingGroups() throws -> [String: Settings] {
         do {
-            return try jsonDictionary.json(atKeyPath: "settingGroups", invalidItemBehaviour: .fail)
+            return try jsonDictionary.jsonStrict(atKeyPath: "settingGroups", invalidItemBehaviour: .fail)
         } catch let specParsingError as SpecParsingError {
             // Re-throw `SpecParsingError` to prevent the misuse of settingGroups.
             throw specParsingError

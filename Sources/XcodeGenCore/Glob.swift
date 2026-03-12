@@ -7,36 +7,36 @@
 //  Adapted from https://gist.github.com/efirestone/ce01ae109e08772647eb061b3bb387c3
 
 import Foundation
-
-public let GlobBehaviorBashV3 = Glob.Behavior(
-    supportsGlobstar: false,
-    includesFilesFromRootOfGlobstar: false,
-    includesDirectoriesInResults: true,
-    includesFilesInResultsIfTrailingSlash: false
-)
-public let GlobBehaviorBashV4 = Glob.Behavior(
-    supportsGlobstar: true, // Matches Bash v4 with "shopt -s globstar" option
-    includesFilesFromRootOfGlobstar: true,
-    includesDirectoriesInResults: true,
-    includesFilesInResultsIfTrailingSlash: false
-)
-public let GlobBehaviorGradle = Glob.Behavior(
-    supportsGlobstar: true,
-    includesFilesFromRootOfGlobstar: true,
-    includesDirectoriesInResults: false,
-    includesFilesInResultsIfTrailingSlash: true
-)
+import ToolsCore
 
 /**
  Finds files on the file system using pattern matching.
  */
-public class Glob: Collection {
-
+public final class Glob: Collection, @unchecked Sendable {
     /**
      * Different glob implementations have different behaviors, so the behavior of this
      * implementation is customizable.
      */
-    public struct Behavior {
+    public struct Behavior: Sendable {
+        public static let bashV3 = Glob.Behavior(
+            supportsGlobstar: false,
+            includesFilesFromRootOfGlobstar: false,
+            includesDirectoriesInResults: true,
+            includesFilesInResultsIfTrailingSlash: false
+        )
+        public static let bashV4 = Glob.Behavior(
+            supportsGlobstar: true, // Matches Bash v4 with "shopt -s globstar" option
+            includesFilesFromRootOfGlobstar: true,
+            includesDirectoriesInResults: true,
+            includesFilesInResultsIfTrailingSlash: false
+        )
+        public static let gradle = Glob.Behavior(
+            supportsGlobstar: true,
+            includesFilesFromRootOfGlobstar: true,
+            includesDirectoriesInResults: false,
+            includesFilesInResultsIfTrailingSlash: true
+        )
+
         // If true then a globstar ("**") causes matching to be done recursively in subdirectories.
         // If false then "**" is treated the same as "*"
         let supportsGlobstar: Bool
@@ -53,11 +53,11 @@ public class Glob: Collection {
         let includesFilesInResultsIfTrailingSlash: Bool
     }
 
-    public static var defaultBehavior = GlobBehaviorBashV4
+    public nonisolated(unsafe) static var defaultBehavior: Behavior = .bashV4
 
     public static let defaultBlacklistedDirectories = ["node_modules", "Pods"]
 
-    @Atomic private var isDirectoryCache = [String: Bool]()
+    private var isDirectoryCache = Atomic<[String: Bool]>(wrappedValue: [:])
 
     public let behavior: Behavior
     public let blacklistedDirectories: [String]
@@ -72,7 +72,6 @@ public class Glob: Collection {
     ///   - behavior: See individual descriptions on `Glob.Behavior` values.
     ///   - blacklistedDirectories: An array of directories to ignore at the root level of the project.
     public init(pattern: String, behavior: Behavior = Glob.defaultBehavior, blacklistedDirectories: [String] = defaultBlacklistedDirectories) {
-
         self.behavior = behavior
         self.blacklistedDirectories = blacklistedDirectories
 
@@ -89,9 +88,10 @@ public class Glob: Collection {
         }
 
         let patterns = behavior.supportsGlobstar ? expandGlobstar(pattern: adjustedPattern) : [adjustedPattern]
-        
+
         #if os(macOS)
-        paths = patterns.parallelMap { paths(usingPattern: $0, includeFiles: includeFiles) }.flatMap { $0 }
+        let includeFilesBox = UncheckedSendable(includeFiles)
+        paths = patterns.parallelMap { paths(usingPattern: $0, includeFiles: includeFilesBox.subject) }.flatMap { $0 }
         #else
         // Parallel invocations of Glob on Linux seems to be causing unexpected crashes
         paths = patterns.map { paths(usingPattern: $0, includeFiles: includeFiles) }.flatMap { $0 }
@@ -188,17 +188,17 @@ public class Glob: Collection {
                 return subDirs
             }
             .joined()
-            .array()
+            .toArray()
     }
 
     private func isDirectory(path: String) -> Bool {
-        if let isDirectory = isDirectoryCache[path] {
+        if let isDirectory = isDirectoryCache.value[path] {
             return isDirectory
         }
 
         var isDirectoryBool = ObjCBool(false)
         let isDirectory = FileManager.default.fileExists(atPath: path, isDirectory: &isDirectoryBool) && isDirectoryBool.boolValue
-        $isDirectoryCache.with { isDirectoryCache in
+        isDirectoryCache.withLock { isDirectoryCache in
             isDirectoryCache[path] = isDirectory
         }
 
@@ -206,7 +206,7 @@ public class Glob: Collection {
     }
 
     private func clearCaches() {
-        $isDirectoryCache.with { isDirectoryCache in
+        isDirectoryCache.withLock { isDirectoryCache in
             isDirectoryCache.removeAll()
         }
     }
@@ -215,11 +215,11 @@ public class Glob: Collection {
         var gt = glob_t()
         defer { globfree(&gt) }
         if executeGlob(pattern: pattern, gt: &gt) {
-             return populateFiles(gt: gt, includeFiles: includeFiles)
+            return populateFiles(gt: gt, includeFiles: includeFiles)
         }
         return []
     }
-    
+
     private func populateFiles(gt: glob_t, includeFiles: Bool) -> [String] {
         var paths = [String]()
         let includeDirectories = behavior.includesDirectoriesInResults
@@ -229,8 +229,8 @@ public class Glob: Collection {
         #else
         let matches = Int(gt.gl_pathc)
         #endif
-        for i in 0..<matches {
-            if let path = String(validatingUTF8: gt.gl_pathv[i]!) {
+        for i in 0 ..< matches {
+            if let path = String(validatingCString: gt.gl_pathv[i]!) {
                 if !includeFiles || !includeDirectories {
                     let isDirectory = self.isDirectory(path: path)
                     if (!includeFiles && !isDirectory) || (!includeDirectories && isDirectory) {
@@ -242,11 +242,5 @@ public class Glob: Collection {
             }
         }
         return paths
-    }
-}
-
-private extension Sequence {
-    func array() -> [Element] {
-        Array(self)
     }
 }

@@ -1,12 +1,11 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 import ProjectSpec
 import XcodeProj
 import Yams
 
-public class ProjectGenerator {
-
+public final class ProjectGenerator {
     let project: Project
 
     public init(project: Project) {
@@ -14,10 +13,11 @@ public class ProjectGenerator {
     }
 
     public func generateXcodeProject(in projectDirectory: Path? = nil, userName: String) throws -> XcodeProj {
-
         // generate PBXProj
-        let pbxProjGenerator = PBXProjGenerator(project: project,
-                                                projectDirectory: projectDirectory)
+        let pbxProjGenerator = PBXProjGenerator(
+            project: project,
+            projectDirectory: projectDirectory
+        )
         let pbxProj = try pbxProjGenerator.generate()
 
         // generate Workspace
@@ -36,7 +36,7 @@ public class ProjectGenerator {
 
         // generate user data
         let userData = userSchemes.isEmpty && schemeManagement == nil ? [] : [
-            XCUserData(userName: userName, schemes: userSchemes, schemeManagement: schemeManagement)
+            XCUserData(userName: userName, schemes: userSchemes, schemeManagement: schemeManagement),
         ]
 
         return XcodeProj(

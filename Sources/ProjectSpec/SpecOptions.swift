@@ -1,5 +1,5 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import Version
 
 public struct SpecOptions: Equatable {
@@ -40,13 +40,13 @@ public struct SpecOptions: Equatable {
     public var schemePathPrefix: String
     public var defaultSourceDirectoryType: SourceType?
 
-    public enum ValidationType: String {
+    public enum ValidationType: String, Sendable {
         case missingConfigs
         case missingConfigFiles
         case missingTestPlans
     }
 
-    public enum SettingPresets: String {
+    public enum SettingPresets: String, Sendable {
         case all
         case none
         case project
@@ -54,21 +54,23 @@ public struct SpecOptions: Equatable {
 
         public var applyTarget: Bool {
             switch self {
-            case .all, .targets: return true
-            default: return false
+            case .all,
+                 .targets: true
+            default: false
             }
         }
 
         public var applyProject: Bool {
             switch self {
-            case .all, .project: return true
-            default: return false
+            case .all,
+                 .project: true
+            default: false
             }
         }
     }
 
     /// Where groups are sorted in relation to other files
-    public enum GroupSortPosition: String {
+    public enum GroupSortPosition: String, Sendable {
         /// groups are at the top
         case top
         /// groups are at the bottom
@@ -137,7 +139,6 @@ public struct SpecOptions: Equatable {
 }
 
 extension SpecOptions: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
         if let string: String = jsonDictionary.json(atKeyPath: "minimumXcodeGenVersion") {
             minimumXcodeGenVersion = try Version.parse(string)
@@ -169,7 +170,7 @@ extension SpecOptions: JSONObjectConvertible {
         schemePathPrefix = jsonDictionary.json(atKeyPath: "schemePathPrefix") ?? SpecOptions.schemePathPrefixDefault
         defaultSourceDirectoryType = jsonDictionary.json(atKeyPath: "defaultSourceDirectoryType")
         if jsonDictionary["fileTypes"] != nil {
-            fileTypes = try jsonDictionary.json(atKeyPath: "fileTypes")
+            fileTypes = try jsonDictionary.jsonStrict(atKeyPath: "fileTypes")
         } else {
             fileTypes = [:]
         }
@@ -182,7 +183,7 @@ extension SpecOptions: JSONEncodable {
             "deploymentTarget": deploymentTarget.toJSONValue(),
             "transitivelyLinkDependencies": transitivelyLinkDependencies,
             "groupSortPosition": groupSortPosition.rawValue,
-            "disabledValidations": disabledValidations.map { $0.rawValue },
+            "disabledValidations": disabledValidations.map(\.rawValue),
             "minimumXcodeGenVersion": minimumXcodeGenVersion?.description,
             "carthageBuildPath": carthageBuildPath,
             "carthageExecutablePath": carthageExecutablePath,
@@ -197,7 +198,7 @@ extension SpecOptions: JSONEncodable {
             "localPackagesGroup": localPackagesGroup,
             "preGenCommand": preGenCommand,
             "postGenCommand": postGenCommand,
-            "fileTypes": fileTypes.mapValues { $0.toJSONValue() }
+            "fileTypes": fileTypes.mapValues { $0.toJSONValue() },
         ]
 
         if settingPresets != SpecOptions.settingPresetsDefault {
@@ -224,7 +225,6 @@ extension SpecOptions: JSONEncodable {
 }
 
 extension SpecOptions: PathContainer {
-
     static var pathProperties: [PathProperty] {
         [
             .string("carthageBuildPath"),

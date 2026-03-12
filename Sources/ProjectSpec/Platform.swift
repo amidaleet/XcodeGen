@@ -1,6 +1,6 @@
 import Foundation
 
-public enum Platform: String, Hashable, CaseIterable {
+public enum Platform: String, Hashable, CaseIterable, Sendable {
     case auto
     case iOS
     case tvOS

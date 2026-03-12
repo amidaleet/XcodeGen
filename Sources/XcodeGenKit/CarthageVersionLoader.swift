@@ -8,40 +8,19 @@
 import Foundation
 import PathKit
 import ProjectSpec
-
-class Mutex<T> {
-    var value: T
-    var semaphore: DispatchSemaphore = DispatchSemaphore(value: 1)
-
-    init(_ value: T) {
-        self.value = value
-    }
-
-    func get<U>(closure: (inout T) throws -> (U)) rethrows -> U {
-        semaphore.wait()
-        defer { semaphore.signal() }
-        return try closure(&value)
-    }
-
-    func get(closure: (inout T) -> Void) {
-        semaphore.wait()
-        closure(&value)
-        semaphore.signal()
-    }
-}
+import ToolsCore
 
 // Note: this class can be accessed on multiple threads. It must therefore stay thread-safe.
-class CarthageVersionLoader {
-
+final class CarthageVersionLoader {
     private let buildPath: Path
-    private var cachedFilesMutex: Mutex<[String: CarthageVersionFile]> = Mutex([:])
+    private var cachedFilesMutex: Atomic<[String: CarthageVersionFile]> = Atomic([:])
 
     init(buildPath: Path) {
         self.buildPath = buildPath
     }
 
     func getVersionFile(for dependency: String) throws -> CarthageVersionFile {
-        return try cachedFilesMutex.get { cachedFiles in
+        try cachedFilesMutex.withLock { cachedFiles in
             if let versionFile = cachedFiles[dependency] {
                 return versionFile
             }
@@ -55,7 +34,6 @@ class CarthageVersionLoader {
 }
 
 struct CarthageVersionFile: Decodable {
-
     private struct Reference: Decodable, Equatable {
         public let name: String
         public let hash: String
@@ -67,14 +45,13 @@ struct CarthageVersionFile: Decodable {
         let container = try decoder.container(keyedBy: Platform.self)
         data = try Platform.allCases.reduce(into: [:]) { data, platform in
             let references = try container.decodeIfPresent([Reference].self, forKey: platform) ?? []
-            let frameworks = Set(references.map { $0.name }).sorted()
+            let frameworks = Set(references.map(\.name)).sorted()
             data[platform] = frameworks
         }
     }
 }
 
-extension Platform: Swift.CodingKey {
-
+extension Platform: CodingKey {
     public var stringValue: String {
         carthageName
     }

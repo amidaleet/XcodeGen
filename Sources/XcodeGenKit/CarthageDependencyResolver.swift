@@ -6,23 +6,23 @@
 //
 
 import Foundation
-import ProjectSpec
 import PathKit
+import ProjectSpec
 
 public struct ResolvedCarthageDependency: Equatable, Hashable {
     let dependency: Dependency
     let isFromTopLevelTarget: Bool
 }
 
-public class CarthageDependencyResolver {
+public final class CarthageDependencyResolver {
     static func getBuildPath(_ project: Project) -> String {
-        return project.options.carthageBuildPath ?? "Carthage/Build"
+        project.options.carthageBuildPath ?? "Carthage/Build"
     }
 
     /// Carthage's base build path as specified by the
     /// project's `SpecOptions`, or `Carthage/Build` by default
     var buildPath: String {
-        return CarthageDependencyResolver.getBuildPath(project)
+        CarthageDependencyResolver.getBuildPath(project)
     }
 
     /// Carthage's executable path as specified by the
@@ -43,9 +43,9 @@ public class CarthageDependencyResolver {
     func buildPath(for platform: Platform, linkType: Dependency.CarthageLinkType) -> String {
         switch linkType {
         case .static:
-            return "\(buildPath)/\(platform.carthageName)/Static"
+            "\(buildPath)/\(platform.carthageName)/Static"
         case .dynamic:
-            return "\(buildPath)/\(platform.carthageName)"
+            "\(buildPath)/\(platform.carthageName)"
         }
     }
 
@@ -76,7 +76,7 @@ public class CarthageDependencyResolver {
                     }
 
                     switch dependency.type {
-                    case .carthage(let findFrameworks, _):
+                    case let .carthage(findFrameworks, _):
                         let findFrameworks = findFrameworks ?? project.options.findCarthageFrameworks
                         if findFrameworks {
                             relatedDependencies(for: dependency, in: target.platform)
@@ -128,7 +128,8 @@ public class CarthageDependencyResolver {
     func relatedDependencies(for dependency: Dependency, in platform: Platform) -> [Dependency] {
         guard
             case .carthage = dependency.type,
-            let versionFile = try? versionLoader.getVersionFile(for: dependency.reference) else {
+            let versionFile = try? versionLoader.getVersionFile(for: dependency.reference)
+        else {
             // No .version file or we've been unable to parse
             // so fail gracefully by returning the main dependency
             return [dependency]
@@ -148,23 +149,22 @@ public class CarthageDependencyResolver {
 }
 
 extension Platform {
-
     public var carthageName: String {
         switch self {
         case .auto:
             // This is a dummy value
-            return "auto"
+            "auto"
         case .iOS:
-            return "iOS"
+            "iOS"
         case .tvOS:
-            return "tvOS"
+            "tvOS"
         case .watchOS:
-            return "watchOS"
+            "watchOS"
         case .macOS:
-            return "Mac"
+            "Mac"
         case .visionOS:
             // This is a dummy value because Carthage doesn't support visionOS.
-            return "visionOS"
+            "visionOS"
         }
     }
 }

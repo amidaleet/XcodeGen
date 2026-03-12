@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SupportedDestination: String, CaseIterable {
+public enum SupportedDestination: String, CaseIterable, Sendable {
     case iOS
     case tvOS
     case macOS
@@ -10,41 +10,40 @@ public enum SupportedDestination: String, CaseIterable {
 }
 
 extension SupportedDestination {
-    
     public var string: String {
         switch self {
         case .iOS:
-            return "ios"
+            "ios"
         case .tvOS:
-            return "tvos"
+            "tvos"
         case .macOS:
-            return "macos"
+            "macos"
         case .macCatalyst:
-            return "maccatalyst"
+            "maccatalyst"
         case .watchOS:
-            return "watchos"
+            "watchos"
         case .visionOS:
-            return "xros"
+            "xros"
         }
     }
-    
+
     // This is used to:
     // 1. Get the first one and apply SettingPresets 'Platforms' and 'Product_Platform' if the platform is 'auto'
     // 2. Sort, loop and merge together SettingPresets 'SupportedDestinations'
     public var priority: Int {
         switch self {
         case .iOS:
-            return 0
+            0
         case .tvOS:
-            return 1
+            1
         case .watchOS:
-            return 2
+            2
         case .visionOS:
-            return 3
+            3
         case .macOS:
-            return 4
+            4
         case .macCatalyst:
-            return 5
+            5
         }
     }
 }

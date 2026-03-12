@@ -11,14 +11,15 @@ extension Path {
     /// - `../a/b` simplifies to `../a/b`
     /// - `a/../../c` simplifies to `../c`
     public func simplifyingParentDirectoryReferences() -> Path {
-        if !string.contains("..") { // Skip simplifying if its already simple
-            var string = self.string
-            while string.hasSuffix(Path.separator) { // Remove all trailing path separators
-                string.removeLast()
-            }
-            return Path(String(string))
+        if string.contains("..") {
+            return normalize().components.reduce(Path(), +)
         }
-        return normalize().components.reduce(Path(), +)
+        // Skip simplifying, its already simple
+        var string = self.string
+        while string.hasSuffix(Path.separator) { // Remove all trailing path separators
+            string.removeLast()
+        }
+        return Path(string)
     }
 
     /// Returns the relative path necessary to go from `base` to `self`.
@@ -41,7 +42,7 @@ extension Path {
                 return memo
 
             // No path to backtrack from
-            case (.none, .some(let rhs)):
+            case let (.none, .some(rhs)):
                 guard rhs != "." else {
                     // Skip . instead of appending it
                     return try pathComponents(for: path.dropFirst(), relativeTo: base, memo: memo)
@@ -49,11 +50,11 @@ extension Path {
                 return try pathComponents(for: path.dropFirst(), relativeTo: base, memo: memo + [rhs])
 
             // Both sides have a common parent
-            case (.some(let lhs), .some(let rhs)) where memo.isEmpty && lhs == rhs:
+            case let (.some(lhs), .some(rhs)) where memo.isEmpty && lhs == rhs:
                 return try pathComponents(for: path.dropFirst(), relativeTo: base.dropFirst(), memo: memo)
 
             // `base` has a path to back out of
-            case (.some(let lhs), _):
+            case let (.some(lhs), _):
                 guard lhs != ".." else {
                     throw PathArgumentError.unknownParentDirectory
                 }
@@ -69,9 +70,11 @@ extension Path {
             throw PathArgumentError.unmatchedAbsolutePath
         }
 
-        return Path(components: try pathComponents(for: ArraySlice(simplifyingParentDirectoryReferences().components),
-                                                   relativeTo: ArraySlice(base.simplifyingParentDirectoryReferences().components),
-                                                   memo: []))
+        return Path(components: try pathComponents(
+            for: ArraySlice(simplifyingParentDirectoryReferences().components),
+            relativeTo: ArraySlice(base.simplifyingParentDirectoryReferences().components),
+            memo: []
+        ))
     }
 
     /// Returns whether `self` is a strict parent of `child`.

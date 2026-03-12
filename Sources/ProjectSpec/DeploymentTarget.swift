@@ -1,9 +1,8 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import Version
 
-public struct DeploymentTarget: Equatable {
-
+public struct DeploymentTarget: Hashable, Sendable {
     public var iOS: Version?
     public var tvOS: Version?
     public var watchOS: Version?
@@ -26,43 +25,41 @@ public struct DeploymentTarget: Equatable {
 
     public func version(for platform: Platform) -> Version? {
         switch platform {
-        case .auto: return nil
-        case .iOS: return iOS
-        case .tvOS: return tvOS
-        case .watchOS: return watchOS
-        case .macOS: return macOS
-        case .visionOS: return visionOS
+        case .auto: nil
+        case .iOS: iOS
+        case .tvOS: tvOS
+        case .watchOS: watchOS
+        case .macOS: macOS
+        case .visionOS: visionOS
         }
     }
 }
 
 extension Platform {
-
     public var deploymentTargetSetting: String {
         switch self {
-        case .auto: return ""
-        case .iOS: return "IPHONEOS_DEPLOYMENT_TARGET"
-        case .tvOS: return "TVOS_DEPLOYMENT_TARGET"
-        case .watchOS: return "WATCHOS_DEPLOYMENT_TARGET"
-        case .macOS: return "MACOSX_DEPLOYMENT_TARGET"
-        case .visionOS: return "XROS_DEPLOYMENT_TARGET"
+        case .auto: ""
+        case .iOS: "IPHONEOS_DEPLOYMENT_TARGET"
+        case .tvOS: "TVOS_DEPLOYMENT_TARGET"
+        case .watchOS: "WATCHOS_DEPLOYMENT_TARGET"
+        case .macOS: "MACOSX_DEPLOYMENT_TARGET"
+        case .visionOS: "XROS_DEPLOYMENT_TARGET"
         }
     }
 
     public var sdkRoot: String {
         switch self {
-        case .auto: return "auto"
-        case .iOS: return "iphoneos"
-        case .tvOS: return "appletvos"
-        case .watchOS: return "watchos"
-        case .macOS: return "macosx"
-        case .visionOS: return "xros"
+        case .auto: "auto"
+        case .iOS: "iphoneos"
+        case .tvOS: "appletvos"
+        case .watchOS: "watchos"
+        case .macOS: "macosx"
+        case .visionOS: "xros"
         }
     }
 }
 
 extension Version {
-
     /// doesn't print patch if 0
     public var deploymentTarget: String {
         "\(major).\(minor)\(patch > 0 ? ".\(patch)" : "")"
@@ -70,16 +67,14 @@ extension Version {
 }
 
 extension DeploymentTarget: JSONObjectConvertible {
-
     public init(jsonDictionary: JSONDictionary) throws {
-
         func parseVersion(_ platform: String) throws -> Version? {
             if let string: String = jsonDictionary.json(atKeyPath: .key(platform)) {
-                return try Version.parse(string)
+                try Version.parse(string)
             } else if let double: Double = jsonDictionary.json(atKeyPath: .key(platform)) {
-                return try Version.parse(double)
+                try Version.parse(double)
             } else {
-                return nil
+                nil
             }
         }
         iOS = try parseVersion("iOS")

@@ -1,10 +1,9 @@
 import Foundation
-import JSONUtilities
+import JSONutils
 import PathKit
 import XcodeProj
 
 public struct Settings: Equatable, JSONObjectConvertible, CustomStringConvertible {
-
     public var buildSettings: BuildSettings
     public var configSettings: [String: Settings]
     public var groups: [String]
@@ -15,17 +14,22 @@ public struct Settings: Equatable, JSONObjectConvertible, CustomStringConvertibl
         self.groups = groups
     }
 
-    public static let empty: Settings = Settings(buildSettings: [:])
+    public init(dictionary: BuildSettings) {
+        buildSettings = dictionary
+        configSettings = [:]
+        groups = []
+    }
+
+    public nonisolated(unsafe) static let empty = Settings(dictionary: [:])
 
     public init(jsonDictionary: JSONDictionary) throws {
         if jsonDictionary["configs"] != nil || jsonDictionary["groups"] != nil || jsonDictionary["base"] != nil {
             groups = jsonDictionary.json(atKeyPath: "groups") ?? jsonDictionary.json(atKeyPath: "presets") ?? []
             let buildSettingsDictionary: JSONDictionary = jsonDictionary.json(atKeyPath: "base") ?? [:]
-            buildSettings = buildSettingsDictionary.mapValues { BuildSetting(any: $0) }
-
-            self.configSettings = try Self.extractValidConfigs(from: jsonDictionary)
+            buildSettings = try buildSettingsDictionary.asBuildSettings()
+            configSettings = try Self.extractValidConfigs(from: jsonDictionary)
         } else {
-            buildSettings = jsonDictionary.mapValues { BuildSetting(any: $0) }
+            buildSettings = try jsonDictionary.asBuildSettings()
             configSettings = [:]
             groups = []
         }
@@ -48,7 +52,7 @@ public struct Settings: Equatable, JSONObjectConvertible, CustomStringConvertibl
             throw SpecParsingError.invalidConfigsMappingFormat(keys: invalidConfigKeys)
         }
 
-        return try jsonDictionary.json(atKeyPath: "configs")
+        return try jsonDictionary.jsonStrict(atKeyPath: "configs")
     }
 
     public static func == (lhs: Settings, rhs: Settings) -> Bool {
@@ -58,7 +62,7 @@ public struct Settings: Equatable, JSONObjectConvertible, CustomStringConvertibl
     }
 
     public var description: String {
-        var string: String = ""
+        var string = ""
         if !buildSettings.isEmpty {
             let buildSettingDescription = buildSettings.map { "\($0) = \($1)" }.joined(separator: "\n")
             if !configSettings.isEmpty || !groups.isEmpty {
@@ -89,7 +93,6 @@ public struct Settings: Equatable, JSONObjectConvertible, CustomStringConvertibl
 }
 
 extension Settings: ExpressibleByDictionaryLiteral {
-
     public init(dictionaryLiteral elements: (String, BuildSetting)...) {
         var buildSettings: BuildSettings = [:]
         elements.forEach { buildSettings[$0.0] = $0.1 }
@@ -97,8 +100,7 @@ extension Settings: ExpressibleByDictionaryLiteral {
     }
 }
 
-extension Dictionary where Key == String {
-
+extension Dictionary where Key == String, Value: Any {
     public func merged(_ dictionary: [Key: Value]) -> [Key: Value] {
         var mergedDictionary = self
         mergedDictionary.merge(dictionary)
@@ -117,49 +119,15 @@ public func += (lhs: inout BuildSettings, rhs: BuildSettings?) {
     lhs.merge(rhs)
 }
 
-extension BuildSetting {
-
-    public init(any value: Any) {
-        if let array = value as? [String] {
-            self = .array(array)
-        } else if let bool = value as? Bool {
-            self = .init(booleanLiteral: bool)
-        } else {
-            self = .string("\(value)")
-        }
-    }
-
-    public func toAny() -> Any {
-        switch self {
-        case let .string(value): return value
-        case let .array(value): return value
-        }
-    }
-}
-
-extension ProjectAttribute {
-
-    public init(any value: Any) {
-        if let array = value as? [String] {
-            self = .array(array)
-        } else if let object = value as? PBXObject {
-            self = .targetReference(object)
-        } else {
-            self = .string("\(value)")
-        }
-    }
-}
-
 extension Settings: JSONEncodable {
     public func toJSONValue() -> Any {
-        let anySettings = buildSettings.mapValues { $0.toAny() }
-        if groups.count > 0 || configSettings.count > 0 {
+        if !groups.isEmpty || !configSettings.isEmpty {
             return [
-                "base": anySettings,
+                "base": buildSettings,
                 "groups": groups,
                 "configs": configSettings.mapValues { $0.toJSONValue() },
-            ] as [String : Any]
+            ] as [String: Any]
         }
-        return anySettings
+        return buildSettings
     }
 }

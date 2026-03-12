@@ -2,8 +2,7 @@ import Foundation
 import ProjectSpec
 import XcodeProj
 
-public class BreakpointGenerator {
-
+public final class BreakpointGenerator {
     let project: Project
 
     public init(project: Project) {
@@ -119,7 +118,7 @@ public class BreakpointGenerator {
         )
 
         return XCBreakpointList.BreakpointProxy.BreakpointContent.BreakpointActionProxy(
-            actionExtensionID:  actionExtensionID,
+            actionExtensionID: actionExtensionID,
             actionContent: xcaction
         )
     }

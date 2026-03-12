@@ -1,27 +1,28 @@
 import Foundation
+import JSONutils
 import PathKit
 import XcodeProj
 
 extension PBXFileElement {
     public var nameOrPath: String {
-        return name ?? path ?? ""
+        name ?? path ?? ""
     }
 
     static func sortByNamePath(_ lhs: PBXFileElement, _ rhs: PBXFileElement) -> Bool {
-        return lhs.namePathSortString.localizedStandardCompare(rhs.namePathSortString) == .orderedAscending
+        lhs.namePathSortString.localizedStandardCompare(rhs.namePathSortString) == .orderedAscending
     }
 
     private var namePathSortString: String {
         // This string needs to be unique for all combinations of name & path or the order won't be stable.
-        return "\(name ?? path ?? "")\t\(name ?? "")\t\(path ?? "")"
+        "\(name ?? path ?? "")\t\(name ?? "")\t\(path ?? "")"
     }
 }
 
 extension PBXProj {
-
     public func printGroups() -> String {
         guard let project = projects.first,
-            let mainGroup = project.mainGroup else {
+              let mainGroup = project.mainGroup
+        else {
             return ""
         }
         return printGroup(group: mainGroup)
@@ -47,14 +48,12 @@ extension PBXProj {
 }
 
 extension Dictionary {
-
     public var valueArray: [Value] {
         Array(values)
     }
 }
 
 extension Xcode {
-
     public static func fileType(path: Path, productType: PBXProductType? = nil) -> String? {
         guard let fileExtension = path.extension else { return nil }
         switch (fileExtension, productType) {
